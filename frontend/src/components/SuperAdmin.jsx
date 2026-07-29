@@ -1655,39 +1655,6 @@ function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
 function firstWeekdayOfMonth(y, m) { return new Date(y, m, 1).getDay(); }
 function isSameYMD(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
 
-const ATTENDANCE_STUDENTS = [
-  {
-    rollNumber: "827544",
-    studentName: "Rehman Ali",
-    fatherName: "Nazeer Ahmed",
-    course: "Web Development",
-    campus: "TITAN Sukkur Campus",
-    totalClasses: 17,
-    presentDates: ["2026-05-05", "2026-05-07", "2026-05-12", "2026-05-14", "2026-05-19", "2026-05-21", "2026-05-26", "2026-05-28", "2026-06-09", "2026-06-11"],
-    leaveDates: [],
-  },
-  {
-    rollNumber: "827545",
-    studentName: "Ayesha Khan",
-    fatherName: "Imran Khan",
-    course: "Graphic Designing",
-    campus: "TITAN Karachi Campus",
-    totalClasses: 15,
-    presentDates: ["2026-05-05", "2026-05-07", "2026-05-12", "2026-05-14", "2026-05-19", "2026-05-21", "2026-05-26", "2026-05-28", "2026-06-02", "2026-06-04", "2026-06-09"],
-    leaveDates: ["2026-05-08"],
-  },
-  {
-    rollNumber: "827546",
-    studentName: "Bilal Ahmed",
-    fatherName: "Tariq Ahmed",
-    course: "Web Development",
-    campus: "TITAN Lahore Campus",
-    totalClasses: 17,
-    presentDates: ["2026-05-05", "2026-05-07", "2026-05-12", "2026-05-14", "2026-05-19", "2026-05-21", "2026-05-26", "2026-05-28", "2026-06-02", "2026-06-04", "2026-06-09", "2026-06-11"],
-    leaveDates: [],
-  },
-];
-
 /* ---------------------------------------------------------------
    Trainer directory + Trainer attendance (scan card / view / request)
 ------------------------------------------------------------------ */
@@ -2044,33 +2011,47 @@ function MarkAttendancePage() {
   const [rollInput, setRollInput] = useState("");
   const [studentInfo, setStudentInfo] = useState(null); // { student, history, error }
   const [feed, setFeed] = useState([]); // recent marks, newest first
+  const [marking, setMarking] = useState(false);
   const { toasts, showToast } = useToasts();
 
-  const handleMark = () => {
+  // ---- Mark attendance: POST to MongoDB, then pull the roll number's
+  // recent history back so the panel reflects real saved records. ----
+  const handleMark = async () => {
     const roll = rollInput.trim();
-    if (!roll) return;
+    if (!roll || marking) return;
+    setMarking(true);
 
-    const student = ATTENDANCE_STUDENTS.find((s) => s.rollNumber === roll);
-
-    if (!student) {
-      setStudentInfo({ error: "No student found with this roll number." });
-      return;
-    }
-    if (student.status && student.status !== "active") {
-      setStudentInfo({
-        student,
-        error: `The student exists, but their status is invalid. '${student.status}'`,
+    try {
+      const response = await fetch(`${API_URL}/api/attendance/mark`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rollNumber: roll }),
       });
-      return;
+      const data = await response.json();
+
+      if (!response.ok) {
+        // 404 = no such roll number, 409 = student exists but blocked status
+        setStudentInfo({ student: data.student, error: data.message || "Could not mark attendance." });
+        return;
+      }
+
+      const historyRes = await fetch(`${API_URL}/api/attendance/history/${encodeURIComponent(roll)}`);
+      const historyData = await historyRes.json();
+      const history = historyRes.ok && Array.isArray(historyData)
+        ? historyData.map((r) => ({ label: `${r.date} — ${r.status === "leave" ? "Leave" : "Present"}` }))
+        : [];
+
+      setStudentInfo({ student: data.student, history, error: null });
+      setFeed((prev) => [{ student: data.student, time: new Date() }, ...prev]);
+      showToast(`Attendance marked for ${data.student.studentName}`);
+      setRollInput("");
+    } catch (error) {
+      console.error("Mark attendance error:", error);
+      setStudentInfo({ error: "Could not reach the server. Please try again." });
+      showToast("Could not mark attendance", "error");
+    } finally {
+      setMarking(false);
     }
-
-    const now = new Date();
-    const history = (student.attendanceHistory || []).slice();
-
-    setStudentInfo({ student, history, error: null });
-    setFeed((prev) => [{ student, time: now }, ...prev]);
-    showToast(`Attendance marked for ${student.studentName}`);
-    setRollInput("");
   };
 
   return (
@@ -2092,8 +2073,8 @@ function MarkAttendancePage() {
             </div>
           </div>
 
-          <button className="ta-btn-primary ta-mark-btn" onClick={handleMark}>
-            Mark Attendance
+          <button className="ta-btn-primary ta-mark-btn" onClick={handleMark} disabled={marking}>
+            {marking ? "Marking…" : "Mark Attendance"}
           </button>
 
           <div className="ta-attendance-cards">
@@ -2109,16 +2090,14 @@ function MarkAttendancePage() {
                 </div>
               ) : (
                 <div className="ta-attendance-student">
-                  {studentInfo.student.avatar ? (
-                    <img src={studentInfo.student.avatar} alt={studentInfo.student.studentName} />
-                  ) : (
-                    <Icon path={ICONS.user} size={48} />
-                  )}
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <Avatar src={studentInfo.student.photo} alt={studentInfo.student.studentName} size={64} />
+                  </div>
                   <h4>{studentInfo.student.studentName}</h4>
                   <p className="ta-attendance-roll">Roll Number: {studentInfo.student.rollNumber}</p>
                   <p className="ta-attendance-course">{studentInfo.student.course}</p>
                   <p className="ta-attendance-payment">
-                    Payment ({studentInfo.student.paymentMonth || "N/A"}) : {studentInfo.student.paymentStatus || "N/A"}
+                    Payment Status: {studentInfo.student.paymentStatus || "N/A"}
                   </p>
 
                   {studentInfo.error ? (
@@ -2154,13 +2133,7 @@ function MarkAttendancePage() {
             <div className="ta-attendance-feed">
               {feed.map((f, i) => (
                 <div className="ta-attendance-feed-item" key={i}>
-                  {f.student.avatar ? (
-                    <img src={f.student.avatar} alt={f.student.studentName} />
-                  ) : (
-                    <div className="ta-attendance-feed-avatar ta-attendance-feed-avatar-blank">
-                      {f.student.studentName.charAt(0)}
-                    </div>
-                  )}
+                  <Avatar src={f.student.photo} alt={f.student.studentName} size={32} />
                   <div className="ta-attendance-feed-info">
                     <p className="ta-attendance-feed-name">
                       {f.student.studentName} ({f.student.rollNumber})
@@ -2181,11 +2154,37 @@ function MarkAttendancePage() {
 }
 
 function ViewAttendancePage() {
-  const [records, setRecords] = useState(ATTENDANCE_STUDENTS);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [rollInput, setRollInput] = useState("");
   const [query, setQuery] = useState("");
   const [detailsFor, setDetailsFor] = useState(null);
   const { toasts, showToast } = useToasts();
+
+  // ---- Load the per-student attendance summary from MongoDB on mount ----
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSummary = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(`${API_URL}/api/attendance/summary`);
+        const data = await response.json();
+        if (!cancelled && response.ok && Array.isArray(data)) {
+          setRecords(data);
+        }
+      } catch (error) {
+        console.error("Failed to load attendance summary", error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = records.filter(
     (r) =>
@@ -2196,14 +2195,37 @@ function ViewAttendancePage() {
 
   const runSearch = () => setQuery(rollInput);
 
-  const handleMarkLeave = (rollNumber, dateStr) => {
-    setRecords((prev) =>
-      prev.map((r) => (r.rollNumber === rollNumber ? { ...r, leaveDates: [...r.leaveDates, dateStr] } : r))
-    );
-    setDetailsFor((prev) =>
-      prev && prev.rollNumber === rollNumber ? { ...prev, leaveDates: [...prev.leaveDates, dateStr] } : prev
-    );
-    showToast("Marked as leave");
+  // ---- Mark a specific absent day as leave: POST to MongoDB, then patch
+  // local state (bump leave count / drop absent count) without a full reload. ----
+  const handleMarkLeave = async (rollNumber, dateStr, reason) => {
+    try {
+      const response = await fetch(`${API_URL}/api/attendance/leave`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rollNumber, date: dateStr, reason }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to mark leave");
+      }
+
+      const patch = (r) =>
+        r.rollNumber === rollNumber
+          ? {
+              ...r,
+              leaveDates: [...r.leaveDates, dateStr],
+              leave: r.leave + 1,
+              absent: Math.max(0, r.absent - 1),
+            }
+          : r;
+
+      setRecords((prev) => prev.map(patch));
+      setDetailsFor((prev) => (prev && prev.rollNumber === rollNumber ? patch(prev) : prev));
+      showToast("Marked as leave");
+    } catch (error) {
+      console.error("Mark leave error:", error);
+      showToast(error.message || "Could not mark leave", "error");
+    }
   };
 
   return (
@@ -2237,7 +2259,15 @@ function ViewAttendancePage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={9}>
+                  <div className="ta-empty-state">
+                    <p>Loading attendance…</p>
+                  </div>
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={9}>
                   <div className="ta-empty-state">
@@ -2622,26 +2652,77 @@ function MarkTrainerAttendancePage() {
   const [employeeId, setEmployeeId] = useState("");
   const [verifiedTrainer, setVerifiedTrainer] = useState(null);
   const [searched, setSearched] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
   const { toasts, showToast } = useToasts();
 
-  const handleVerify = () => {
-    const trainer = TRAINERS_FULL_LIST.find((t) => t.employeeId === employeeId.trim());
-    setVerifiedTrainer(trainer || null);
-    setSearched(true);
-  };
-
-  const handleCheckIn = () => {
-    if (!verifiedTrainer) return;
-    if (!isWithinCheckInWindow(verifiedTrainer.slotSchedule)) {
-      showToast("Check-in not allowed at this time", "error");
-      return;
+  // ---- Verify: look the trainer up against the real MongoDB collection
+  // instead of the hardcoded demo list. ----
+  const handleVerify = async () => {
+    const id = employeeId.trim();
+    if (!id || verifying) return;
+    setVerifying(true);
+    try {
+      const response = await fetch(`${API_URL}/api/trainers`);
+      const data = await response.json();
+      const trainer = response.ok && Array.isArray(data) ? data.find((t) => t.employeeId === id) : null;
+      setVerifiedTrainer(trainer || null);
+      setSearched(true);
+    } catch (error) {
+      console.error("Verify trainer error:", error);
+      setVerifiedTrainer(null);
+      setSearched(true);
+      showToast("Could not reach the server", "error");
+    } finally {
+      setVerifying(false);
     }
-    showToast(`Checked in: ${verifiedTrainer.name}`);
   };
 
-  const handleCheckOut = () => {
-    if (!verifiedTrainer) return;
-    showToast(`Checked out: ${verifiedTrainer.name}`);
+  // ---- Check in: POST creates a TrainerAttendance record in MongoDB.
+  // Backend validates the check-in window and rejects a duplicate open check-in. ----
+  const handleCheckIn = async () => {
+    if (!verifiedTrainer || actionBusy) return;
+    setActionBusy(true);
+    try {
+      const response = await fetch(`${API_URL}/api/trainer-attendance/checkin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId: verifiedTrainer.employeeId }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Check-in failed");
+      }
+      showToast(`Checked in: ${verifiedTrainer.name}`);
+    } catch (error) {
+      console.error("Trainer check-in error:", error);
+      showToast(error.message || "Check-in failed", "error");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  // ---- Check out: closes today's open TrainerAttendance record ----
+  const handleCheckOut = async () => {
+    if (!verifiedTrainer || actionBusy) return;
+    setActionBusy(true);
+    try {
+      const response = await fetch(`${API_URL}/api/trainer-attendance/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId: verifiedTrainer.employeeId }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Check-out failed");
+      }
+      showToast(`Checked out: ${verifiedTrainer.name}`);
+    } catch (error) {
+      console.error("Trainer check-out error:", error);
+      showToast(error.message || "Check-out failed", "error");
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   return (
@@ -2658,8 +2739,8 @@ function MarkTrainerAttendancePage() {
               onChange={(e) => { setEmployeeId(e.target.value); setSearched(false); }}
               onKeyDown={(e) => e.key === "Enter" && handleVerify()}
             />
-            <button className="ta-btn-primary ta-full-width ta-verify-btn" onClick={handleVerify}>
-              Verify Trainer
+            <button className="ta-btn-primary ta-full-width ta-verify-btn" onClick={handleVerify} disabled={verifying}>
+              {verifying ? "Verifying…" : "Verify Trainer"}
             </button>
           </div>
 
@@ -2679,10 +2760,10 @@ function MarkTrainerAttendancePage() {
                 <p className="ta-trainer-info-name">{verifiedTrainer.name}</p>
                 <p className="ta-trainer-info-id">Employee ID: {verifiedTrainer.employeeId}</p>
                 <div className="ta-trainer-info-actions">
-                  <button className="ta-btn-primary" onClick={handleCheckIn}>
+                  <button className="ta-btn-primary" onClick={handleCheckIn} disabled={actionBusy}>
                     <Icon path={ICONS.refresh} size={14} /> Check In
                   </button>
-                  <button className="ta-btn-outline ta-checkout-btn" onClick={handleCheckOut}>
+                  <button className="ta-btn-outline ta-checkout-btn" onClick={handleCheckOut} disabled={actionBusy}>
                     <Icon path={ICONS.refresh} size={14} /> Check Out
                   </button>
                 </div>
@@ -2699,14 +2780,15 @@ function MarkTrainerAttendancePage() {
 
 /* ---- View Trainer Attendance ---- */
 
-function TrainerAttendanceFiltersModal({ onClose, onApply, initialValues }) {
+function TrainerAttendanceFiltersModal({ onClose, onApply, initialValues, trainers }) {
   const [values, setValues] = useState(initialValues || {});
   useEscapeKey(onClose);
   const set = (key, val) => setValues((v) => ({ ...v, [key]: val }));
 
-  const trainerNames = TRAINERS_FULL_LIST.map((t) => t.name);
-  const courseNames = [...new Set(TRAINERS_FULL_LIST.flatMap((t) => t.courses))];
-  const scheduleOptions = [...new Set(TRAINERS_FULL_LIST.map((t) => t.slotSchedule))];
+  const trainerList = trainers?.length ? trainers : TRAINERS_FULL_LIST;
+  const trainerNames = trainerList.map((t) => t.name);
+  const courseNames = [...new Set(trainerList.flatMap((t) => t.courses))];
+  const scheduleOptions = [...new Set(trainerList.map((t) => t.slotSchedule))];
 
   return (
     <div className="ta-modal-overlay" onClick={onClose}>
@@ -2824,13 +2906,46 @@ function TrainerAttendanceEditModal({ record, onClose, onSave }) {
 }
 
 function ViewTrainerAttendancePage() {
-  const [records, setRecords] = useState(SEED_TRAINER_ATTENDANCE);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [trainers, setTrainers] = useState([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState({});
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [editRecord, setEditRecord] = useState(null);
   const { toasts, showToast } = useToasts();
+
+  // ---- Load attendance records + trainer list (for filter dropdowns) from MongoDB ----
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [recRes, trainerRes] = await Promise.all([
+          fetch(`${API_URL}/api/trainer-attendance`),
+          fetch(`${API_URL}/api/trainers`),
+        ]);
+        const recData = await recRes.json();
+        const trainerData = await trainerRes.json();
+        if (!cancelled) {
+          setRecords(recRes.ok && Array.isArray(recData) ? recData : SEED_TRAINER_ATTENDANCE);
+          setTrainers(trainerRes.ok && Array.isArray(trainerData) ? trainerData : []);
+        }
+      } catch (error) {
+        console.error("Failed to load trainer attendance", error);
+        if (!cancelled) setRecords(SEED_TRAINER_ATTENDANCE);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const matchesFilters = (r) => {
     const f = appliedFilters;
@@ -2850,10 +2965,25 @@ function ViewTrainerAttendancePage() {
   const runSearch = () => setSearchQuery(searchInput);
   const handleExport = () => showToast("Export downloaded");
 
-  const handleSaveEdit = (updated) => {
-    setRecords((prev) => prev.map((r) => (r.id === editRecord.id ? { ...r, ...updated } : r)));
-    setEditRecord(null);
-    showToast("Attendance updated");
+  // ---- Save a correction: PUT to MongoDB ----
+  const handleSaveEdit = async (updated) => {
+    try {
+      const response = await fetch(`${API_URL}/api/trainer-attendance/${editRecord.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update attendance");
+      }
+      setRecords((prev) => prev.map((r) => (r.id === editRecord.id ? data : r)));
+      setEditRecord(null);
+      showToast("Attendance updated");
+    } catch (error) {
+      console.error("Update trainer attendance error:", error);
+      showToast(error.message || "Could not update attendance", "error");
+    }
   };
 
   return (
@@ -2894,7 +3024,9 @@ function ViewTrainerAttendancePage() {
             </tr>
           </thead>
           <tbody>
-            {filteredRows.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan={8}><div className="ta-empty-state"><p>Loading attendance…</p></div></td></tr>
+            ) : filteredRows.length === 0 ? (
               <tr><td colSpan={8}><div className="ta-empty-state"><Icon path={ICONS.inbox} size={42} /><p>No data</p></div></td></tr>
             ) : (
               filteredRows.map((r) => (
@@ -2926,6 +3058,7 @@ function ViewTrainerAttendancePage() {
           initialValues={appliedFilters}
           onClose={() => setFiltersOpen(false)}
           onApply={setAppliedFilters}
+          trainers={trainers}
         />
       )}
 
@@ -2944,7 +3077,8 @@ function ViewTrainerAttendancePage() {
 
 /* ---- Trainer Attendance Request (correction requests) ---- */
 
-function AttendanceRequestFormModal({ onClose, onSubmit }) {
+function AttendanceRequestFormModal({ onClose, onSubmit, trainers, submitting }) {
+  const [employeeId, setEmployeeId] = useState(trainers?.[0]?.employeeId || "");
   const [date, setDate] = useState(toYMD(TODAY_REF.getFullYear(), TODAY_REF.getMonth(), TODAY_REF.getDate()));
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
@@ -2953,7 +3087,9 @@ function AttendanceRequestFormModal({ onClose, onSubmit }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit({ date, checkIn, checkOut, reason });
+    const trainer = trainers?.find((t) => t.employeeId === employeeId);
+    if (!trainer) return;
+    onSubmit({ trainer, date, checkIn, checkOut, reason });
   };
 
   return (
@@ -2966,6 +3102,15 @@ function AttendanceRequestFormModal({ onClose, onSubmit }) {
           </button>
         </div>
         <div className="ta-modal-body">
+          <div className="ta-filter-field">
+            <label>Trainer *</label>
+            <select className="ta-form-select" required value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+              <option value="">Select trainer</option>
+              {(trainers || []).map((t) => (
+                <option key={t.employeeId} value={t.employeeId}>{t.name} ({t.employeeId})</option>
+              ))}
+            </select>
+          </div>
           <div className="ta-filter-field">
             <label>Date</label>
             <div className="ta-date-range-wrap">
@@ -2994,7 +3139,9 @@ function AttendanceRequestFormModal({ onClose, onSubmit }) {
         </div>
         <div className="ta-modal-footer">
           <button type="button" className="ta-btn-outline" onClick={onClose}>Cancel</button>
-          <button type="submit" className="ta-btn-primary">Submit Request</button>
+          <button type="submit" className="ta-btn-primary" disabled={submitting || !trainers?.length}>
+            {submitting ? "Submitting…" : "Submit Request"}
+          </button>
         </div>
       </form>
     </div>
@@ -3002,28 +3149,77 @@ function AttendanceRequestFormModal({ onClose, onSubmit }) {
 }
 
 function TrainerAttendanceRequestPage() {
-  const [requests, setRequests] = useState(SEED_TRAINER_ATTENDANCE_REQUESTS);
+  const [requests, setRequests] = useState([]);
+  const [trainers, setTrainers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState({});
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const { toasts, showToast } = useToasts();
 
-  const handleGenerate = (vals) => {
-    setRequests((prev) => [
-      {
-        id: nextId(prev),
-        trainerName: "Sir ARSLAN AHMED (SUK)",
-        campus: "Saylani TITAN Sukkur Campus",
-        schedule: "Sat 08:00 AM - 10:00 AM | Sun 08:00 AM - 10:00 AM",
-        checkIn: vals.checkIn,
-        checkOut: vals.checkOut,
-        type: "Correction",
-        status: "pending",
-      },
-      ...prev,
-    ]);
-    setGenerateOpen(false);
-    showToast("Request submitted");
+  // ---- Load correction requests + trainer list from MongoDB ----
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [reqRes, trainerRes] = await Promise.all([
+          fetch(`${API_URL}/api/trainer-attendance-requests`),
+          fetch(`${API_URL}/api/trainers`),
+        ]);
+        const reqData = await reqRes.json();
+        const trainerData = await trainerRes.json();
+        if (!cancelled) {
+          setRequests(reqRes.ok && Array.isArray(reqData) ? reqData : []);
+          setTrainers(trainerRes.ok && Array.isArray(trainerData) ? trainerData : []);
+        }
+      } catch (error) {
+        console.error("Failed to load attendance requests", error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ---- Submit a new correction request: POST to MongoDB ----
+  const handleGenerate = async (vals) => {
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API_URL}/api/trainer-attendance-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trainerId: vals.trainer.id,
+          trainerName: vals.trainer.name,
+          campus: vals.trainer.campus,
+          schedule: vals.trainer.slotSchedule,
+          checkIn: vals.checkIn,
+          checkOut: vals.checkOut,
+          type: "Correction",
+          status: "pending",
+          reason: vals.reason,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to submit request");
+      }
+      setRequests((prev) => [data, ...prev]);
+      setGenerateOpen(false);
+      showToast("Request submitted");
+    } catch (error) {
+      console.error("Submit attendance request error:", error);
+      showToast(error.message || "Could not submit request", "error");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -3060,7 +3256,9 @@ function TrainerAttendanceRequestPage() {
             </tr>
           </thead>
           <tbody>
-            {requests.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan={9}><div className="ta-empty-state"><p>Loading requests…</p></div></td></tr>
+            ) : requests.length === 0 ? (
               <tr><td colSpan={9}><div className="ta-empty-state"><Icon path={ICONS.inbox} size={42} /><p>No data</p></div></td></tr>
             ) : (
               requests.map((r) => (
@@ -3086,12 +3284,15 @@ function TrainerAttendanceRequestPage() {
           initialValues={appliedFilters}
           onClose={() => setFiltersOpen(false)}
           onApply={setAppliedFilters}
+          trainers={trainers}
         />
       )}
 
       {generateOpen && (
         <AttendanceRequestFormModal
           onClose={() => setGenerateOpen(false)}
+          trainers={trainers}
+          submitting={submitting}
           onSubmit={handleGenerate}
         />
       )}
@@ -3603,11 +3804,13 @@ function toInputDate(d) {
 function MultiAttendancePage() {
   const [date, setDate] = useState(() => toInputDate(TODAY_REF));
   const [rollNumbers, setRollNumbers] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const { toasts, showToast } = useToasts();
 
-  const canSubmit = date && rollNumbers.trim().length > 0;
+  const canSubmit = date && rollNumbers.trim().length > 0 && !submitting;
 
-  const handleUpdate = (e) => {
+  // ---- Bulk mark: POST the whole roll-number list to MongoDB in one call ----
+  const handleUpdate = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
 
@@ -3621,8 +3824,30 @@ function MultiAttendancePage() {
       return;
     }
 
-    showToast(`Attendance marked for ${numbers.length} student(s) on ${date}`);
-    setRollNumbers("");
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API_URL}/api/attendance/mark-bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, rollNumbers: numbers }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to mark attendance");
+      }
+
+      if (data.notFound?.length) {
+        showToast(`Marked ${data.marked} · Not found: ${data.notFound.join(", ")}`, "error");
+      } else {
+        showToast(`Attendance marked for ${data.marked} student(s) on ${date}`);
+      }
+      setRollNumbers("");
+    } catch (error) {
+      console.error("Bulk mark attendance error:", error);
+      showToast(error.message || "Could not mark attendance", "error");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -3646,7 +3871,7 @@ function MultiAttendancePage() {
         />
 
         <button type="submit" className="ta-updation-submit" disabled={!canSubmit}>
-          UPDATE
+          {submitting ? "UPDATING…" : "UPDATE"}
         </button>
 
         <p className="ta-updation-hint">

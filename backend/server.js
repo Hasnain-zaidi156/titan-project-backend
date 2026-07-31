@@ -2,12 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
 
 dotenv.config();
 
-// Fallback catalog — mirrors the frontend's COURSES/CAMPUSES lists. Used
-// only so the dashboard's "Courses"/"Campuses" cards don't show 0 before
-// any students have been added yet.
+const SALT_ROUNDS = 10;
+
+// Fallback catalog — mirrors the frontend's COURSES/CAMPUSES lists
 const COURSES = ['Graphic Designing', 'Mobile App Development', 'Web Development', 'Digital Marketing', 'Spoken English'];
 const CAMPUSES = ['TITAN Sukkur Campus', 'TITAN Karachi Campus', 'TITAN Lahore Campus'];
 
@@ -28,18 +29,8 @@ const adminSchema = new mongoose.Schema({
 const AdminUser = mongoose.model('AdminUser', adminSchema);
 
 const fallbackUsers = [
-  {
-    email: 'superadmin@example.com',
-    password: 'super',
-    role: 'Super Admin',
-    name: 'Super Admin',
-  },
-  {
-    email: 'subadmin@example.com',
-    password: 'sub',
-    role: 'Sub Admin',
-    name: 'Sub Admin',
-  },
+  { email: 'superadmin@example.com', password: 'super', role: 'Super Admin', name: 'Super Admin' },
+  { email: 'subadmin@example.com', password: 'sub', role: 'Sub Admin', name: 'Sub Admin' },
 ];
 
 // ================= STUDENT SCHEMA & MODEL =================
@@ -49,17 +40,17 @@ const invoiceSchema = new mongoose.Schema({
   type: { type: String, default: 'Registration' },
   month: { type: String, default: '' },
   dueDate: { type: String, default: '' },
-  amount: { type: Number, default: 1000 },
+  amount: { type: Number, default: 50 },
   status: { type: String, default: 'PENDING' },
 });
 
 const studentSchema = new mongoose.Schema({
   admissionNo: { type: String, required: true, unique: true },
   rollNumber: { type: String, required: true, unique: true },
-  photo: { type: String, default: '' }, // base64 data URL (uploaded from SuperAdmin form)
+  photo: { type: String, default: '' },
   studentName: { type: String, required: true },
   fatherName: { type: String, required: true },
-  cnic: { type: String, required: true },
+  cnic: { type: String, required: true, unique: true },
   phone: { type: String, required: true },
   country: { type: String, default: 'Pakistan' },
   city: { type: String, default: '' },
@@ -72,16 +63,29 @@ const studentSchema = new mongoose.Schema({
   gender: { type: String, default: 'Male' },
   laptop: { type: String, default: 'No' },
   invoices: [invoiceSchema],
+  dob: { type: String, default: '' },
 }, { timestamps: true });
 
 const Student = mongoose.model('Student', studentSchema);
+
+// ================= STUDENT AUTH SCHEMA & MODEL =================
+const studentAuthSchema = new mongoose.Schema({
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true, unique: true },
+  cnic: { type: String, required: true, unique: true },
+  dob: { type: String, required: true },
+  passwordHash: { type: String, required: true },
+  passwordSet: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const StudentAuth = mongoose.model('StudentAuth', studentAuthSchema);
 
 // ================= TRAINER SCHEMA & MODEL =================
 const trainerSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true },
-  employeeId: { type: String, required: true, unique: true }, // doubles as trainer's "roll no"
-  photo: { type: String, default: '' }, // base64 data URL
+  employeeId: { type: String, required: true, unique: true },
+  photo: { type: String, default: '' },
   courses: { type: [String], default: [] },
   cities: { type: [String], default: [] },
   campus: { type: String, default: '' },
@@ -92,12 +96,10 @@ const trainerSchema = new mongoose.Schema({
 const Trainer = mongoose.model('Trainer', trainerSchema);
 
 // ================= STUDENT ATTENDANCE SCHEMA & MODEL =================
-// One document per (student, date). Mark Attendance / Multi Attendance /
-// View Attendance (mark-as-leave) pages all read & write this collection.
 const attendanceSchema = new mongoose.Schema({
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
   rollNumber: { type: String, required: true },
-  date: { type: String, required: true }, // YYYY-MM-DD
+  date: { type: String, required: true },
   status: { type: String, enum: ['present', 'leave'], default: 'present' },
   reason: { type: String, default: '' },
 }, { timestamps: true });
@@ -106,15 +108,13 @@ attendanceSchema.index({ rollNumber: 1, date: 1 }, { unique: true });
 const Attendance = mongoose.model('Attendance', attendanceSchema);
 
 // ================= TRAINER ATTENDANCE SCHEMA & MODEL =================
-// One document per check-in/check-out. Mark Trainer Attendance (scan card)
-// creates/closes these; View Trainer Attendance reads & edits them.
 const trainerAttendanceSchema = new mongoose.Schema({
   trainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Trainer' },
   employeeId: { type: String, required: true },
   trainerName: { type: String, required: true },
   slotSchedule: { type: String, default: '' },
   campus: { type: String, default: '' },
-  checkIn: { type: String, default: '' }, // "YYYY-MM-DDTHH:mm:00"
+  checkIn: { type: String, default: '' },
   checkOut: { type: String, default: '' },
   lateMinutes: { type: Number, default: 0 },
   status: { type: String, default: 'default' },
@@ -123,7 +123,6 @@ const trainerAttendanceSchema = new mongoose.Schema({
 const TrainerAttendance = mongoose.model('TrainerAttendance', trainerAttendanceSchema);
 
 // ================= TRAINER ATTENDANCE REQUEST SCHEMA & MODEL =================
-// Correction requests submitted from the "Attendance Request" page.
 const trainerAttendanceRequestSchema = new mongoose.Schema({
   trainerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Trainer' },
   trainerName: { type: String, required: true },
@@ -138,10 +137,63 @@ const trainerAttendanceRequestSchema = new mongoose.Schema({
 
 const TrainerAttendanceRequest = mongoose.model('TrainerAttendanceRequest', trainerAttendanceRequestSchema);
 
+// ================= ASSIGNMENT SCHEMA & MODEL =================
+const assignmentSubmissionSchema = new mongoose.Schema({
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+  rollNumber: { type: String, required: true },
+  studentName: { type: String, required: true },
+  link: { type: String, default: '' },
+  description: { type: String, default: '' },
+  status: { type: String, default: 'Submitted' },
+  approved: { type: Boolean, default: null },
+  feedback: { type: String, default: '' },
+  submittedAt: { type: Date, default: Date.now },
+});
+
+const assignmentSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  description: { type: String, default: '' },
+  course: { type: String, required: true },
+  campus: { type: String, default: '' },
+  batch: { type: String, default: '' },
+  dueDate: { type: String, required: true },
+  createdBy: { type: String, default: '' },
+  createdByName: { type: String, default: '' },
+  submissions: [assignmentSubmissionSchema],
+}, { timestamps: true });
+
+const Assignment = mongoose.model('Assignment', assignmentSchema);
+
+// ================= QUIZ SCHEMA & MODEL =================
+const quizResultSchema = new mongoose.Schema({
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+  rollNumber: { type: String, required: true },
+  studentName: { type: String, required: true },
+  score: { type: Number, default: 0 },
+  totalQuestions: { type: Number, default: 0 },
+  attempts: { type: Number, default: 1 },
+  status: { type: String, default: 'PENDING' },
+  date: { type: String, default: '' },
+});
+
+const quizSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  course: { type: String, required: true },
+  campus: { type: String, default: '' },
+  totalQuestions: { type: Number, default: 40 },
+  date: { type: String, required: true },
+  expiry: { type: String, required: true },
+  status: { type: String, default: 'ACTIVE' },
+  createdBy: { type: String, default: '' },
+  createdByName: { type: String, default: '' },
+  results: [quizResultSchema],
+}, { timestamps: true });
+
+const Quiz = mongoose.model('Quiz', quizSchema);
+
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
-// Maps a Mongoose student document to the plain shape the frontend expects
-// (id as a string instead of Mongo's _id).
+// ================= SERIALIZERS =================
 function serializeStudent(doc) {
   return {
     id: doc._id.toString(),
@@ -163,6 +215,7 @@ function serializeStudent(doc) {
     gender: doc.gender,
     laptop: doc.laptop,
     invoices: doc.invoices || [],
+    dob: doc.dob || '',
   };
 }
 
@@ -222,25 +275,71 @@ function serializeTrainerAttendanceRequest(doc) {
   };
 }
 
-// ---- shared date / schedule helpers (mirror the frontend's logic so
-// backend-computed stats and check-in windows match what the UI shows) ----
+function serializeAssignment(doc) {
+  return {
+    id: doc._id.toString(),
+    title: doc.title,
+    description: doc.description || '',
+    course: doc.course,
+    campus: doc.campus || '',
+    batch: doc.batch || '',
+    dueDate: doc.dueDate,
+    createdBy: doc.createdBy || '',
+    createdByName: doc.createdByName || '',
+    createdAt: doc.createdAt,
+    submissions: (doc.submissions || []).map((s) => ({
+      id: s._id.toString(),
+      studentId: s.studentId?.toString(),
+      rollNumber: s.rollNumber,
+      studentName: s.studentName,
+      link: s.link || '',
+      description: s.description || '',
+      status: s.status,
+      approved: s.approved,
+      feedback: s.feedback || '',
+      submittedAt: s.submittedAt,
+    })),
+  };
+}
 
-const CLASS_WEEKDAYS = [2, 4]; // Tuesday & Thursday are scheduled class days
+function serializeQuiz(doc) {
+  return {
+    id: doc._id.toString(),
+    title: doc.title,
+    course: doc.course,
+    campus: doc.campus || '',
+    totalQuestions: doc.totalQuestions,
+    date: doc.date,
+    expiry: doc.expiry,
+    status: doc.status,
+    createdBy: doc.createdBy || '',
+    createdByName: doc.createdByName || '',
+    results: (doc.results || []).map((r) => ({
+      id: r._id.toString(),
+      studentId: r.studentId?.toString(),
+      rollNumber: r.rollNumber,
+      studentName: r.studentName,
+      score: r.score,
+      totalQuestions: r.totalQuestions,
+      attempts: r.attempts,
+      status: r.status,
+      date: r.date,
+    })),
+  };
+}
 
+// ================= HELPERS =================
 function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
-function toYMD(d) {
+function todayYMD() {
+  const d = new Date();
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function todayYMD() {
-  return toYMD(new Date());
-}
+const CLASS_WEEKDAYS = [2, 4];
 
-// Counts how many scheduled class weekdays fall between `from` and `to`
-// (inclusive), used to compute a student's "Total Classes".
 function countClassWeekdays(from, to) {
   let count = 0;
   const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
@@ -274,8 +373,6 @@ function to24hMinutes(t) {
   return h * 60 + min;
 }
 
-// Returns { allowed, lateMinutes, nearestStart } for a check-in attempt
-// against a trainer's slot schedule.
 function evaluateCheckInWindow(schedule, now = new Date()) {
   const times = parseScheduleTimes(schedule);
   if (times.length === 0) return { allowed: true, lateMinutes: 0 };
@@ -291,24 +388,21 @@ function evaluateCheckInWindow(schedule, now = new Date()) {
   return { allowed: false, lateMinutes: 0 };
 }
 
-// Generates a unique 6-digit roll number by scanning existing ones instead
-// of trusting document count (count drifts if students are ever deleted).
 async function generateUniqueRollNumber() {
   const last = await Student.findOne().sort({ rollNumber: -1 }).select('rollNumber');
   let next = last && !Number.isNaN(Number(last.rollNumber)) ? Number(last.rollNumber) + 1 : 827001;
-  // Guard against collisions (e.g. manually-entered roll numbers higher than the sequence).
   while (await Student.exists({ rollNumber: String(next) })) {
     next += 1;
   }
   return String(next);
 }
 
-// Health Endpoint
+// ================= HEALTH ENDPOINT =================
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, message: 'Titan admin backend is running' });
 });
 
-// Admin Login Endpoint (Unchanged)
+// ================= ADMIN AUTH ENDPOINTS =================
 app.post('/api/admin/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -336,8 +430,22 @@ app.post('/api/admin/login', async (req, res) => {
   }
 });
 
-// Admin Dashboard Endpoint — computed live from MongoDB so the numbers
-// change the moment a student is added/edited/deleted (no more hardcoding).
+app.post('/api/admin/seed', async (req, res) => {
+  try {
+    const seedUsers = fallbackUsers;
+    if (isDbConnected()) {
+      await AdminUser.deleteMany({});
+      const created = await AdminUser.insertMany(seedUsers);
+      return res.json({ message: 'Seeded admin users', count: created.length });
+    }
+    res.json({ message: 'Seeded admin users in memory', count: seedUsers.length });
+  } catch (error) {
+    console.error('Seed error:', error);
+    res.status(500).json({ message: 'Seeding failed', error: error.message });
+  }
+});
+
+// ================= DASHBOARD ENDPOINT =================
 app.get('/api/admin/dashboard', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -354,8 +462,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
     res.json({
       totalStudents,
       enrolledStudents,
-      // Fall back to the fixed course/campus catalog when no students exist
-      // yet, so the cards don't show 0 on a brand-new install.
       courses: distinctCourses.filter(Boolean).length || COURSES.length,
       campuses: distinctCampuses.filter(Boolean).length || CAMPUSES.length,
     });
@@ -364,28 +470,83 @@ app.get('/api/admin/dashboard', async (req, res) => {
   }
 });
 
-// Admin Seed Endpoint
-app.post('/api/admin/seed', async (req, res) => {
+// ================= STUDENT AUTH ENDPOINTS =================
+app.post('/api/students/set-password', async (req, res) => {
   try {
-    const seedUsers = fallbackUsers;
-    if (isDbConnected()) {
-      await AdminUser.deleteMany({});
-      const created = await AdminUser.insertMany(seedUsers);
-      return res.json({ message: 'Seeded admin users', count: created.length });
+    const { cnic, dob, newPassword } = req.body;
+
+    if (!cnic || !dob || !newPassword) {
+      return res.status(400).json({ message: 'CNIC, DOB, and password are required.' });
     }
-    res.json({ message: 'Seeded admin users in memory', count: seedUsers.length });
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+    }
+
+    const student = await Student.findOne({ cnic: cnic.trim() });
+    if (!student) {
+      return res.status(404).json({ message: 'No student found with this CNIC.' });
+    }
+
+    const existingAuth = await StudentAuth.findOne({ studentId: student._id });
+    if (existingAuth && existingAuth.passwordSet) {
+      return res.status(409).json({ message: 'Password already set for this student. Please login.' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    await StudentAuth.findOneAndUpdate(
+      { studentId: student._id },
+      { $set: { cnic: student.cnic, dob, passwordHash, passwordSet: true } },
+      { upsert: true, new: true }
+    );
+
+    res.status(201).json({ message: 'Password created successfully! You can now login.' });
   } catch (error) {
-    console.error('Seed error:', error);
-    res.status(500).json({ message: 'Seeding failed', error: error.message });
+    console.error('Set password error:', error);
+    res.status(500).json({ message: 'Failed to set password', error: error.message });
   }
 });
 
-// ================= STUDENT API ENDPOINTS =================
-// All of these read/write directly against the MongoDB cluster configured
-// via MONGODB_URI in .env. Every add / edit / invoice change / delete from
-// the SuperAdmin portal's Students page goes through these routes.
+app.post('/api/students/login', async (req, res) => {
+  try {
+    const { cnic, password } = req.body;
 
-// GET: Fetch all students from MongoDB
+    if (!cnic || !password) {
+      return res.status(400).json({ message: 'CNIC and password are required.' });
+    }
+
+    const authRecord = await StudentAuth.findOne({ cnic: cnic.trim() });
+    if (!authRecord || !authRecord.passwordSet) {
+      return res.status(404).json({ message: 'No password set for this CNIC. Please create a password.' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, authRecord.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Invalid CNIC or password.' });
+    }
+
+    const student = await Student.findById(authRecord.studentId);
+    if (!student) {
+      return res.status(404).json({ message: 'Student record not found.' });
+    }
+
+    res.json({
+      id: student._id,
+      rollNumber: student.rollNumber,
+      studentName: student.studentName,
+      course: student.course,
+      campus: student.campus,
+      fatherName: student.fatherName,
+      phone: student.phone,
+      cnic: student.cnic,
+    });
+  } catch (error) {
+    console.error('Student login error:', error);
+    res.status(500).json({ message: 'Login failed', error: error.message });
+  }
+});
+
+// ================= STUDENT CRUD ENDPOINTS =================
 app.get('/api/students', async (req, res) => {
   try {
     if (isDbConnected()) {
@@ -399,7 +560,6 @@ app.get('/api/students', async (req, res) => {
   }
 });
 
-// POST: Add new student to MongoDB
 app.post('/api/students', async (req, res) => {
   try {
     const studentData = req.body;
@@ -415,6 +575,7 @@ app.post('/api/students', async (req, res) => {
         rollNumber,
         photo: studentData.photo || '',
         invoices: studentData.invoices || [],
+        dob: studentData.dob || '',
       });
 
       const savedStudent = await newStudent.save();
@@ -426,14 +587,14 @@ app.post('/api/students', async (req, res) => {
     if (error.code === 11000 && error.keyPattern?.rollNumber) {
       return res.status(409).json({ message: 'Roll number already exists. Please choose another one.' });
     }
+    if (error.code === 11000 && error.keyPattern?.cnic) {
+      return res.status(409).json({ message: 'CNIC already exists. Please use a unique CNIC.' });
+    }
     console.error('Save student error:', error);
     res.status(500).json({ message: 'Failed to save student', error: error.message });
   }
 });
 
-// PUT: Update an existing student in MongoDB (edit form, invoice
-// generation, and mark-as-paid all go through this same route — they
-// just send different fields in the body).
 app.put('/api/students/:id', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -443,7 +604,7 @@ app.put('/api/students/:id', async (req, res) => {
     const updateBody = { ...req.body };
     if (typeof updateBody.rollNumber === 'string') {
       updateBody.rollNumber = updateBody.rollNumber.trim();
-      if (!updateBody.rollNumber) delete updateBody.rollNumber; // never blank out an existing roll number
+      if (!updateBody.rollNumber) delete updateBody.rollNumber;
     }
 
     const updated = await Student.findByIdAndUpdate(
@@ -461,12 +622,14 @@ app.put('/api/students/:id', async (req, res) => {
     if (error.code === 11000 && error.keyPattern?.rollNumber) {
       return res.status(409).json({ message: 'Roll number already exists. Please choose another one.' });
     }
+    if (error.code === 11000 && error.keyPattern?.cnic) {
+      return res.status(409).json({ message: 'CNIC already exists. Please use a unique CNIC.' });
+    }
     console.error('Update student error:', error);
     res.status(500).json({ message: 'Failed to update student', error: error.message });
   }
 });
 
-// DELETE: Remove a student from MongoDB
 app.delete('/api/students/:id', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -479,6 +642,8 @@ app.delete('/api/students/:id', async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
+    await StudentAuth.deleteOne({ studentId: req.params.id });
+
     res.json({ message: 'Deleted', id: req.params.id });
   } catch (error) {
     console.error('Delete student error:', error);
@@ -486,17 +651,54 @@ app.delete('/api/students/:id', async (req, res) => {
   }
 });
 
-// ================= STUDENT ATTENDANCE API ENDPOINTS =================
-// Backs the Mark Attendance / Multi Attendance / View Attendance pages.
-// Every present/leave mark is a real Attendance document in MongoDB,
-// keyed by (rollNumber, date), so stats survive refreshes and are shared
-// across Super Admin and Sub Admin.
+// ================= VOUCHER GENERATION =================
+app.post('/api/students/:id/generate-voucher', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
 
-// Statuses that should NOT be allowed to have attendance marked.
-const BLOCKED_STUDENT_STATUSES = ['rejected', 'eliminated', 'dropout', 'cancelled', 'blacklisted'];
+    const student = await Student.findById(req.params.id);
+    if (!student) return res.status(404).json({ message: 'Student not found' });
 
-// GET: Summary table for View Attendance — one row per student with
-// computed Total/Present/Leave/Absent/Percentage.
+    const alreadyPending = student.invoices.find((inv) => inv.status === 'PENDING');
+    if (alreadyPending) {
+      return res.status(409).json({
+        message: 'A voucher is already pending. Please pay it before generating a new one.',
+        student: serializeStudent(student),
+      });
+    }
+
+    const now = new Date();
+    const targetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const yyyymm = `${targetDate.getFullYear()}${pad2(targetDate.getMonth() + 1)}`;
+    const monthLabel = targetDate.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+    const dueDate = `08-${targetDate.toLocaleString('en-US', { month: 'short' })}-${targetDate.getFullYear()}`;
+
+    const voucherId = `${yyyymm}${student.rollNumber}`;
+
+    const newInvoice = {
+      invoiceNumber: voucherId,
+      jazzCashId: voucherId,
+      type: 'Monthly',
+      month: monthLabel,
+      dueDate,
+      amount: 50,
+      status: 'PENDING',
+    };
+
+    student.invoices.push(newInvoice);
+    student.paymentStatus = 'Pending';
+    await student.save();
+
+    res.status(201).json({ invoice: newInvoice, student: serializeStudent(student) });
+  } catch (error) {
+    console.error('Generate voucher error:', error);
+    res.status(500).json({ message: 'Failed to generate voucher', error: error.message });
+  }
+});
+
+// ================= ATTENDANCE ENDPOINTS =================
 app.get('/api/attendance/summary', async (req, res) => {
   try {
     if (!isDbConnected()) return res.json([]);
@@ -539,7 +741,6 @@ app.get('/api/attendance/summary', async (req, res) => {
   }
 });
 
-// GET: Recent attendance history for one roll number (used by Mark Attendance's history panel).
 app.get('/api/attendance/history/:rollNumber', async (req, res) => {
   try {
     if (!isDbConnected()) return res.json([]);
@@ -551,7 +752,8 @@ app.get('/api/attendance/history/:rollNumber', async (req, res) => {
   }
 });
 
-// POST: Mark today's (or given date's) attendance for one roll number.
+const BLOCKED_STUDENT_STATUSES = ['rejected', 'eliminated', 'dropout', 'cancelled', 'blacklisted'];
+
 app.post('/api/attendance/mark', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -587,7 +789,6 @@ app.post('/api/attendance/mark', async (req, res) => {
   }
 });
 
-// POST: Bulk mark present for a comma-list of roll numbers (Multi Attendance page).
 app.post('/api/attendance/mark-bulk', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -623,7 +824,6 @@ app.post('/api/attendance/mark-bulk', async (req, res) => {
   }
 });
 
-// POST: Mark a specific date as leave for a roll number (from the absent-day calendar click).
 app.post('/api/attendance/leave', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -651,11 +851,7 @@ app.post('/api/attendance/leave', async (req, res) => {
   }
 });
 
-// ================= TRAINER API ENDPOINTS =================
-// Mirrors the Student routes above so Trainers now persist in the same
-// MongoDB cluster instead of only living in frontend React state.
-
-// GET: Fetch all trainers from MongoDB
+// ================= TRAINER ENDPOINTS =================
 app.get('/api/trainers', async (req, res) => {
   try {
     if (isDbConnected()) {
@@ -669,7 +865,6 @@ app.get('/api/trainers', async (req, res) => {
   }
 });
 
-// POST: Add new trainer to MongoDB
 app.post('/api/trainers', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -695,7 +890,6 @@ app.post('/api/trainers', async (req, res) => {
   }
 });
 
-// PUT: Update an existing trainer in MongoDB
 app.put('/api/trainers/:id', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -726,7 +920,6 @@ app.put('/api/trainers/:id', async (req, res) => {
   }
 });
 
-// DELETE: Remove a trainer from MongoDB
 app.delete('/api/trainers/:id', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -746,10 +939,7 @@ app.delete('/api/trainers/:id', async (req, res) => {
   }
 });
 
-// ================= TRAINER ATTENDANCE API ENDPOINTS =================
-// Backs the "Scan Trainer Card" (Mark), View, and edit-correction flows.
-
-// GET: All trainer attendance records (View Trainer Attendance page)
+// ================= TRAINER ATTENDANCE ENDPOINTS =================
 app.get('/api/trainer-attendance', async (req, res) => {
   try {
     if (!isDbConnected()) return res.json([]);
@@ -761,9 +951,6 @@ app.get('/api/trainer-attendance', async (req, res) => {
   }
 });
 
-// POST: Check in a trainer by Employee ID. Rejects if outside the
-// schedule's check-in window, or if already checked in today without
-// having checked out yet.
 app.post('/api/trainer-attendance/checkin', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -810,7 +997,6 @@ app.post('/api/trainer-attendance/checkin', async (req, res) => {
   }
 });
 
-// POST: Check out a trainer by Employee ID — closes today's open record.
 app.post('/api/trainer-attendance/checkout', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -839,7 +1025,6 @@ app.post('/api/trainer-attendance/checkout', async (req, res) => {
   }
 });
 
-// PUT: Manual correction of a trainer attendance record (edit modal on View page).
 app.put('/api/trainer-attendance/:id', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -860,9 +1045,7 @@ app.put('/api/trainer-attendance/:id', async (req, res) => {
   }
 });
 
-// ================= TRAINER ATTENDANCE REQUEST API ENDPOINTS =================
-
-// GET: All correction requests
+// ================= TRAINER ATTENDANCE REQUEST ENDPOINTS =================
 app.get('/api/trainer-attendance-requests', async (req, res) => {
   try {
     if (!isDbConnected()) return res.json([]);
@@ -874,7 +1057,6 @@ app.get('/api/trainer-attendance-requests', async (req, res) => {
   }
 });
 
-// POST: Submit a new correction request
 app.post('/api/trainer-attendance-requests', async (req, res) => {
   try {
     if (!isDbConnected()) {
@@ -889,7 +1071,226 @@ app.post('/api/trainer-attendance-requests', async (req, res) => {
   }
 });
 
-// Start Server
+// ================= ASSIGNMENT ENDPOINTS =================
+app.get('/api/assignments', async (req, res) => {
+  try {
+    if (!isDbConnected()) return res.json([]);
+    const filter = {};
+    if (req.query.course) filter.course = req.query.course;
+    if (req.query.campus) filter.campus = req.query.campus;
+    const assignments = await Assignment.find(filter).sort({ createdAt: -1 });
+    res.json(assignments.map(serializeAssignment));
+  } catch (error) {
+    console.error('Fetch assignments error:', error);
+    res.status(500).json({ message: 'Failed to fetch assignments', error: error.message });
+  }
+});
+
+app.post('/api/assignments', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { title, description, course, campus, batch, dueDate, createdBy, createdByName } = req.body;
+    if (!title || !course || !dueDate) {
+      return res.status(400).json({ message: 'title, course and dueDate are required' });
+    }
+    const created = await Assignment.create({
+      title, description, course, campus, batch, dueDate, createdBy, createdByName, submissions: [],
+    });
+    res.status(201).json(serializeAssignment(created));
+  } catch (error) {
+    console.error('Create assignment error:', error);
+    res.status(500).json({ message: 'Failed to create assignment', error: error.message });
+  }
+});
+
+app.put('/api/assignments/:id', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const updated = await Assignment.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Assignment not found' });
+    res.json(serializeAssignment(updated));
+  } catch (error) {
+    console.error('Update assignment error:', error);
+    res.status(500).json({ message: 'Failed to update assignment', error: error.message });
+  }
+});
+
+app.delete('/api/assignments/:id', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const deleted = await Assignment.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: 'Assignment not found' });
+    res.json({ message: 'Deleted', id: req.params.id });
+  } catch (error) {
+    console.error('Delete assignment error:', error);
+    res.status(500).json({ message: 'Failed to delete assignment', error: error.message });
+  }
+});
+
+app.post('/api/assignments/:id/submit', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { rollNumber, studentName, link, description } = req.body;
+    if (!rollNumber || !studentName) {
+      return res.status(400).json({ message: 'rollNumber and studentName are required' });
+    }
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+
+    const isLate = new Date() > new Date(assignment.dueDate);
+    const existingIdx = assignment.submissions.findIndex((s) => s.rollNumber === rollNumber);
+    const submissionData = {
+      rollNumber, studentName, link: link || '', description: description || '',
+      status: isLate ? 'Late Submitted' : 'Submitted', approved: null, submittedAt: new Date(),
+    };
+
+    if (existingIdx >= 0) {
+      assignment.submissions[existingIdx].set(submissionData);
+    } else {
+      assignment.submissions.push(submissionData);
+    }
+    await assignment.save();
+    res.json(serializeAssignment(assignment));
+  } catch (error) {
+    console.error('Submit assignment error:', error);
+    res.status(500).json({ message: 'Failed to submit assignment', error: error.message });
+  }
+});
+
+app.put('/api/assignments/:id/submissions/:subId', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+
+    const submission = assignment.submissions.id(req.params.subId);
+    if (!submission) return res.status(404).json({ message: 'Submission not found' });
+
+    if (typeof req.body.approved === 'boolean') submission.approved = req.body.approved;
+    if (typeof req.body.feedback === 'string') submission.feedback = req.body.feedback;
+    await assignment.save();
+    res.json(serializeAssignment(assignment));
+  } catch (error) {
+    console.error('Update submission error:', error);
+    res.status(500).json({ message: 'Failed to update submission', error: error.message });
+  }
+});
+
+// ================= QUIZ ENDPOINTS =================
+app.get('/api/quizzes', async (req, res) => {
+  try {
+    if (!isDbConnected()) return res.json([]);
+    const filter = {};
+    if (req.query.course) filter.course = req.query.course;
+    const quizzes = await Quiz.find(filter).sort({ createdAt: -1 });
+    res.json(quizzes.map(serializeQuiz));
+  } catch (error) {
+    console.error('Fetch quizzes error:', error);
+    res.status(500).json({ message: 'Failed to fetch quizzes', error: error.message });
+  }
+});
+
+app.post('/api/quizzes', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { title, course, campus, totalQuestions, date, expiry, createdBy, createdByName } = req.body;
+    if (!title || !course || !date || !expiry) {
+      return res.status(400).json({ message: 'title, course, date and expiry are required' });
+    }
+    const created = await Quiz.create({
+      title, course, campus, totalQuestions: totalQuestions || 40, date, expiry,
+      createdBy, createdByName, status: 'ACTIVE', results: [],
+    });
+    res.status(201).json(serializeQuiz(created));
+  } catch (error) {
+    console.error('Create quiz error:', error);
+    res.status(500).json({ message: 'Failed to create quiz', error: error.message });
+  }
+});
+
+app.put('/api/quizzes/:id', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const updated = await Quiz.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Quiz not found' });
+    res.json(serializeQuiz(updated));
+  } catch (error) {
+    console.error('Update quiz error:', error);
+    res.status(500).json({ message: 'Failed to update quiz', error: error.message });
+  }
+});
+
+app.delete('/api/quizzes/:id', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const deleted = await Quiz.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: 'Quiz not found' });
+    res.json({ message: 'Deleted', id: req.params.id });
+  } catch (error) {
+    console.error('Delete quiz error:', error);
+    res.status(500).json({ message: 'Failed to delete quiz', error: error.message });
+  }
+});
+
+app.post('/api/quizzes/:id/result', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { rollNumber, studentName, score, totalQuestions } = req.body;
+    if (!rollNumber || !studentName || score == null || !totalQuestions) {
+      return res.status(400).json({ message: 'rollNumber, studentName, score and totalQuestions are required' });
+    }
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
+
+    const pct = (Number(score) / Number(totalQuestions)) * 100;
+    const resultData = {
+      rollNumber, studentName, score: Number(score), totalQuestions: Number(totalQuestions),
+      attempts: 1, status: pct >= 50 ? 'PASSED' : 'FAILED',
+      date: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }),
+    };
+
+    const existingIdx = quiz.results.findIndex((r) => r.rollNumber === rollNumber);
+    if (existingIdx >= 0) {
+      resultData.attempts = quiz.results[existingIdx].attempts + 1;
+      quiz.results[existingIdx].set(resultData);
+    } else {
+      quiz.results.push(resultData);
+    }
+    await quiz.save();
+    res.json(serializeQuiz(quiz));
+  } catch (error) {
+    console.error('Submit quiz result error:', error);
+    res.status(500).json({ message: 'Failed to submit quiz result', error: error.message });
+  }
+});
+
+// ================= START SERVER =================
 const startServer = async () => {
   try {
     if (process.env.MONGODB_URI) {

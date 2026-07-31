@@ -1,12 +1,100 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import "./StudentDashboard.css"
 
 const TITAN_LOGO = "https://i.ibb.co/q3c3CkLS/titan-logo.jpg"
 const SIR_YASIR_PHOTO = "https://i.ibb.co/pB0qFxpB/new-pic-2.jpg"
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"
 
-export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", onLogout }) {
+export default function StudentDashboard({
+  studentName = "Syed Hasnain Zaidi",
+  studentId = null,
+  rollNumber = "467643",
+  course = "Modern Web Application Development",
+  campus = "Saylani TITAN Sukkur Campus",
+  onLogout,
+}) {
+  // ===== Live voucher / invoices (backend-synced) =====
+  const [liveInvoices, setLiveInvoices] = useState(null)
+  const [generatingVoucher, setGeneratingVoucher] = useState(false)
+  const [voucherError, setVoucherError] = useState("")
+
+  // ===== Live assignments / quizzes created by trainers =====
+  const [liveAssignments, setLiveAssignments] = useState([])
+  const [liveQuizzes, setLiveQuizzes] = useState([])
+
+  const fetchLiveAssignments = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/assignments?course=${encodeURIComponent(course)}`)
+      const data = await res.json()
+      setLiveAssignments(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error("Failed to load assignments:", err)
+    }
+  }
+
+  const fetchLiveQuizzes = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/quizzes?course=${encodeURIComponent(course)}`)
+      const data = await res.json()
+      setLiveQuizzes(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error("Failed to load quizzes:", err)
+    }
+  }
+
+  useEffect(() => {
+    fetchLiveAssignments()
+    fetchLiveQuizzes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [course])
+
+  // ===== Generate Voucher =====
+  const generateVoucher = async () => {
+    if (!studentId) {
+      setVoucherError("Voucher generation needs your account to be linked. Please contact admin.")
+      return
+    }
+    setGeneratingVoucher(true)
+    setVoucherError("")
+    try {
+      const res = await fetch(`${API_BASE}/api/students/${studentId}/generate-voucher`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        if (res.status === 409) {
+          alert(data.message)
+          setVoucherError(data.message)
+        } else {
+          throw new Error(data.message || "Failed to generate voucher")
+        }
+        setGeneratingVoucher(false)
+        return
+      }
+      const voucher = data.invoice
+      setLiveInvoices(data.student.invoices)
+      alert(
+        `✅ Voucher Generated!\n\n` +
+        `Voucher ID: ${voucher.invoiceNumber}\n` +
+        `Amount: Rs. ${voucher.amount}\n` +
+        `Month: ${voucher.month}\n` +
+        `Due Date: ${voucher.dueDate}\n\n` +
+        `📱 Please send EXACTLY Rs. 50 to:\n` +
+        `JazzCash/Easypaisa: 03273911082 (Sadapay)\n\n` +
+        `⚠️ IMPORTANT: Include your Voucher ID (${voucher.invoiceNumber}) in the payment remarks.\n` +
+        `Payment will be verified manually by the admin.`
+      )
+    } catch (err) {
+      console.error('Generate voucher error:', err)
+      setVoucherError(err.message || "Something went wrong. Please try again.")
+    } finally {
+      setGeneratingVoucher(false)
+    }
+  }
+
   const [studentView, setStudentView] = useState("home")
   const [studentActiveMenu, setStudentActiveMenu] = useState("dashboard")
   const [studentSidebarOpen, setStudentSidebarOpen] = useState(false)
@@ -23,7 +111,7 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
   // Profile
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [profileData, setProfileData] = useState({
-    name: "Syed Hasnain Zaidi",
+    name: studentName || "Syed Hasnain Zaidi",
     email: "drzaidil56@gmail.com",
     phone: "03273911082",
     address: "Not provided",
@@ -45,12 +133,12 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
   const ASSIGN_PER_PAGE = 10
 
   const studentCourse = {
-    title: "Modern Web Application Development",
+    title: course || "Modern Web Application Development",
     status: "ENROLLED",
     progress: 80,
     batch: 1,
-    roll: "467643",
-    campus: "Saylani TITAN Sukkur Campus",
+    roll: rollNumber || "467643",
+    campus: campus || "Saylani TITAN Sukkur Campus",
     city: "Sukkur",
     schedule: ["Mon 02:00 PM - 04:00 PM", "Wed 02:00 PM - 04:00 PM", "Fri 02:00 PM - 04:00 PM"],
     attendance: "103/127",
@@ -472,23 +560,94 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
           <span className="breadcrumb-nav-link" onClick={() => setStudentView("home")}>Home</span> &gt; <span className="current-crumb">{studentCourse.title}</span> &gt; <span className="current-crumb">Payment</span>
         </div>
       </div>
-      <div className="workspace-card-view">
-        <h3 style={{ marginTop: 0 }}>Payment Instructions</h3>
-        <div className="s-payment-steps">
-          {["Open JazzCash APP", "Select 'Universities' option", "Search and select 'TITAN'", "Enter your Voucher ID", "Enter the amount (Rs: 1000/-)", "Confirm the payment", "Take screenshot and keep as record"].map((step, i) => (
-            <div key={i} className="s-payment-step"><div className="s-step-num">{i + 1}</div><span>{step}</span></div>
-          ))}
+
+      <div className="workspace-card-view" style={{ marginBottom: 20, borderLeft: '4px solid var(--primary-color)' }}>
+        <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '1.3rem' }}>📱</span> Payment Instructions
+        </h3>
+        <ul style={{ paddingLeft: '20px', lineHeight: '2', color: 'var(--text-muted)' }}>
+          <li><strong>Amount:</strong> Rs. 50 (Monthly Fee)</li>
+          <li><strong>Payment Method:</strong> JazzCash or Easypaisa</li>
+          <li><strong>Account Number:</strong> 03273911082 (Sadapay)</li>
+          <li><strong>⚠️ Important:</strong> Your <strong>Voucher ID</strong> MUST be included in the payment remarks.</li>
+          <li>Payment will be verified manually by the admin. Please allow 24-48 hours.</li>
+        </ul>
+        <div style={{ 
+          marginTop: '12px', 
+          padding: '12px', 
+          background: 'var(--primary-light)', 
+          borderRadius: '8px',
+          border: '1px solid rgba(13, 71, 161, 0.2)'
+        }}>
+          <p style={{ margin: 0, fontSize: '0.85rem' }}>
+            <strong>Example Remarks:</strong> <code style={{ background: '#fff', padding: '4px 8px', borderRadius: '4px' }}>202606827544</code> (Your Voucher ID)
+          </p>
         </div>
       </div>
-      <div className="workspace-card-view" style={{ marginTop: 20 }}>
-        <h3>Fee Records</h3>
-        <div className="table-responsive-wrapper">
+
+      <div className="workspace-card-view">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <h3 style={{ margin: 0 }}>Fee Records</h3>
+          <button
+            className="student-view-details-btn"
+            style={{ 
+              opacity: generatingVoucher ? 0.7 : 1,
+              maxWidth: '220px',
+              padding: '10px 16px',
+              fontSize: '0.85rem'
+            }}
+            onClick={generateVoucher}
+            disabled={generatingVoucher || !studentId}
+          >
+            {generatingVoucher ? "Generating..." : "Generate Voucher"}
+          </button>
+        </div>
+        {voucherError && <p style={{ color: "var(--red-color, #ef4444)", fontSize: "0.85rem", marginTop: 8 }}>{voucherError}</p>}
+
+        <div className="table-responsive-wrapper" style={{ marginTop: 12 }}>
           <table className="client-data-table s-fee-table">
-            <thead><tr><th>Month</th><th>Amount</th><th>Type</th><th>Due date</th><th>Voucher ID</th><th>Status</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Amount</th>
+                <th>Type</th>
+                <th>Due date</th>
+                <th>Voucher ID</th>
+                <th>Status</th>
+              </tr>
+            </thead>
             <tbody>
-              {feeRecords.map((r, i) => (
-                <tr key={i}><td>{r.month}</td><td>{r.amount}</td><td>{r.type}</td><td>{r.dueDate}</td><td style={{ fontSize: "0.8rem" }}>{r.voucherId}</td><td><span className="badge-present-status">{r.status}</span></td></tr>
+              {(liveInvoices || []).map((inv, i) => (
+                <tr key={`live-${i}`}>
+                  <td>{inv.month}</td>
+                  <td>Rs. {inv.amount} /-</td>
+                  <td>{inv.type}</td>
+                  <td>{inv.dueDate}</td>
+                  <td style={{ fontSize: "0.8rem", fontWeight: 'bold', color: 'var(--primary-color)' }}>{inv.invoiceNumber}</td>
+                  <td>
+                    <span className={inv.status === "PAID" ? "badge-present-status" : "s-att-badge s-att-leave"}>
+                      {inv.status}
+                    </span>
+                  </td>
+                </tr>
               ))}
+              {(liveInvoices || []).length === 0 && feeRecords.slice(0, 3).map((r, i) => (
+                <tr key={i}>
+                  <td>{r.month}</td>
+                  <td>{r.amount}</td>
+                  <td>{r.type}</td>
+                  <td>{r.dueDate}</td>
+                  <td style={{ fontSize: "0.8rem" }}>{r.voucherId}</td>
+                  <td><span className="badge-present-status">{r.status}</span></td>
+                </tr>
+              ))}
+              {(liveInvoices || []).length === 0 && feeRecords.length === 0 && (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px 0' }}>
+                    No payment records found. Generate a voucher to get started.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -520,6 +679,39 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
           <table className="client-data-table s-assign-table">
             <thead><tr><th>Assignment</th><th>Course</th><th>Due Date</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
+              {liveAssignments.map((a) => {
+                const mySub = a.submissions.find((s) => s.rollNumber === rollNumber)
+                const status = mySub ? (mySub.approved === true ? "APPROVED" : mySub.approved === false ? "NOT APPROVED" : mySub.status.toUpperCase()) : "NOT SUBMITTED"
+                return (
+                  <tr key={a.id}>
+                    <td className="s-assign-title">{a.title} <span className="s-att-badge s-att-present" style={{ marginLeft: 6 }}>LIVE</span></td>
+                    <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{a.course}</td>
+                    <td>{a.dueDate}</td>
+                    <td><span className={`s-assign-badge s-assign-${status.replace(/\s/g, "").toLowerCase()}`}>{status}</span></td>
+                    <td>
+                      <button
+                        className="s-btn-outline"
+                        style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                        onClick={async () => {
+                          const link = window.prompt("Paste your submission link (Google Drive, GitHub, etc.):", mySub?.link || "")
+                          if (link === null) return
+                          try {
+                            const res = await fetch(`${API_BASE}/api/assignments/${a.id}/submit`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ rollNumber, studentName, link, description: "" }),
+                            })
+                            const data = await res.json()
+                            if (res.ok) setLiveAssignments((prev) => prev.map((x) => (x.id === data.id ? data : x)))
+                          } catch (err) { console.error("Submit failed:", err) }
+                        }}
+                      >
+                        {mySub ? "Re-submit" : "Submit"}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
               {paginatedAssignments.map((a, i) => (
                 <tr key={i}><td className="s-assign-title">{a.title}</td><td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{a.course}</td><td>{a.dueDate}</td><td><span className={`s-assign-badge s-assign-${a.status.replace(/\s/g, "").toLowerCase()}`}>{a.status}</span></td><td><span className="s-action-completed">Completed</span></td></tr>
               ))}
@@ -567,6 +759,45 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
           <table className="client-data-table s-quiz-table">
             <thead><tr><th>Module</th><th>Title</th><th>Questions</th><th>Attempts</th><th>Score</th><th>Percentage</th><th>Status</th><th>Note</th><th>Action</th></tr></thead>
             <tbody>
+              {liveQuizzes.map((q) => {
+                const myResult = q.results.find((r) => r.rollNumber === rollNumber)
+                const pct = myResult ? Math.round((myResult.score / myResult.totalQuestions) * 100) : 0
+                return (
+                  <tr key={q.id}>
+                    <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{q.course} <span className="s-att-badge s-att-present" style={{ marginLeft: 6 }}>LIVE</span></td>
+                    <td className="s-quiz-title">{q.title}</td>
+                    <td>{q.totalQuestions}</td>
+                    <td>{myResult?.attempts || 0}</td>
+                    <td>{myResult ? `${myResult.score} / ${myResult.totalQuestions}` : "—"}</td>
+                    <td>{myResult ? <span className={`s-quiz-pct s-quiz-${myResult.status.toLowerCase()}`}>{pct}%</span> : "—"}</td>
+                    <td>{myResult ? <span className={`s-quiz-badge s-quiz-${myResult.status.toLowerCase()}`}>{myResult.status}</span> : <span className="s-quiz-badge">PENDING</span>}</td>
+                    <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>—</td>
+                    <td>
+                      <button
+                        className="s-btn-outline"
+                        style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                        onClick={async () => {
+                          const scoreStr = window.prompt(`Enter your score out of ${q.totalQuestions}:`, myResult?.score || "")
+                          if (scoreStr === null) return
+                          const score = Number(scoreStr)
+                          if (Number.isNaN(score)) return
+                          try {
+                            const res = await fetch(`${API_BASE}/api/quizzes/${q.id}/result`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ rollNumber, studentName, score, totalQuestions: q.totalQuestions }),
+                            })
+                            const data = await res.json()
+                            if (res.ok) setLiveQuizzes((prev) => prev.map((x) => (x.id === data.id ? data : x)))
+                          } catch (err) { console.error("Submit result failed:", err) }
+                        }}
+                      >
+                        {myResult ? "Retry" : "Submit"}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
               {quizzesData.map((q, i) => (
                 <tr key={i}><td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{q.module}</td><td className="s-quiz-title">{q.title}</td><td>{q.questions}</td><td>{q.attempts}</td><td>{q.score}</td><td><span className={`s-quiz-pct s-quiz-${q.status.toLowerCase()}`}>{q.pct}%</span></td><td><span className={`s-quiz-badge s-quiz-${q.status.toLowerCase()}`}>{q.status}</span></td><td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{q.note || "—"}</td><td><span className="s-action-completed">Completed</span></td></tr>
               ))}
@@ -842,7 +1073,22 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
                   <div className="table-responsive-wrapper">
                     <table className="client-data-table plain-table">
                       <thead><tr><th>Month</th><th>Amount</th><th>Type</th><th>Due date</th><th>Voucher ID</th><th>Status</th></tr></thead>
-                      <tbody><tr><td>{feeRecords[0].month}</td><td>{feeRecords[0].amount}</td><td>{feeRecords[0].type}</td><td>{feeRecords[0].dueDate}</td><td>{feeRecords[0].voucherId}</td><td><span className="badge-present-status">{feeRecords[0].status}</span></td></tr></tbody>
+                      <tbody>
+                        {(liveInvoices || []).length > 0 ? (
+                          liveInvoices.slice(0, 1).map((inv, i) => (
+                            <tr key={i}>
+                              <td>{inv.month}</td>
+                              <td>Rs. {inv.amount} /-</td>
+                              <td>{inv.type}</td>
+                              <td>{inv.dueDate}</td>
+                              <td>{inv.invoiceNumber}</td>
+                              <td><span className={inv.status === "PAID" ? "badge-present-status" : "s-att-badge s-att-leave"}>{inv.status}</span></td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr><td>{feeRecords[0].month}</td><td>{feeRecords[0].amount}</td><td>{feeRecords[0].type}</td><td>{feeRecords[0].dueDate}</td><td>{feeRecords[0].voucherId}</td><td><span className="badge-present-status">{feeRecords[0].status}</span></td></tr>
+                        )}
+                      </tbody>
                     </table>
                   </div>
                 </div>

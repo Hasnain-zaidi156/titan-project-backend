@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import './Dashboard.css';
 
 const TITAN_LOGO = 'https://i.ibb.co/q3c3CkLS/titan-logo.jpg';
@@ -6,9 +6,7 @@ const TITAN_LOGO_BG = 'https://i.ibb.co/Zz3Hk1Q5/titan-logo-bg.jpg';
 const SIR_YASIR_PHOTO = 'https://i.ibb.co/wF2jCyRH/WhatsApp-Image-2026-03-18-at-5-47-44-PM.jpg';
 const PROFILE_BG_IMG = 'https://i.ibb.co/0FqY1Z2/Whats-App-Image-2026-03-18-at-5-47-44-PM.jpg';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-
-const Dashboard = ({ onLogout }) => {
+  const Dashboard = ({ onLogout }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentMenu, setCurrentMenu] = useState('dashboard');
   const [selectedCourse, setSelectedCourse] = useState(null);
@@ -36,8 +34,6 @@ const Dashboard = ({ onLogout }) => {
   // Assignment submission view
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
-  const [selectedSubmissionIdx, setSelectedSubmissionIdx] = useState(-1);
-  const [submissionFeedback, setSubmissionFeedback] = useState({});
 
   // Quiz view
   const [selectedQuiz, setSelectedQuiz] = useState(null);
@@ -58,215 +54,6 @@ const Dashboard = ({ onLogout }) => {
   const [profilePhoto, setProfilePhoto] = useState(SIR_YASIR_PHOTO);
   const [profilePhotoDraft, setProfilePhotoDraft] = useState(SIR_YASIR_PHOTO);
   const photoInputRef = useRef(null);
-
-  // ===== Live Assignments / Quizzes (synced with the Student Portal via the backend) =====
-  const [liveAssignments, setLiveAssignments] = useState([]);
-  const [liveQuizzes, setLiveQuizzes] = useState([]);
-  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
-  const [quizzesLoading, setQuizzesLoading] = useState(false);
-
-  const [showNewAssignmentModal, setShowNewAssignmentModal] = useState(false);
-  const [newAssignmentForm, setNewAssignmentForm] = useState({ title: '', description: '', dueDate: '' });
-  const [creatingAssignment, setCreatingAssignment] = useState(false);
-  const [assignmentFormError, setAssignmentFormError] = useState('');
-
-  const [showNewQuizModal, setShowNewQuizModal] = useState(false);
-  const [newQuizForm, setNewQuizForm] = useState({ title: '', date: '', expiry: '', totalQuestions: 40 });
-  const [creatingQuiz, setCreatingQuiz] = useState(false);
-  const [quizFormError, setQuizFormError] = useState('');
-
-  const fetchLiveAssignments = async (course) => {
-    if (!course) return;
-    setAssignmentsLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/assignments?course=${encodeURIComponent(course)}`);
-      const data = await res.json();
-      setLiveAssignments(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Failed to load assignments:', err);
-      setLiveAssignments([]);
-    } finally {
-      setAssignmentsLoading(false);
-    }
-  };
-
-  const fetchLiveQuizzes = async (course) => {
-    if (!course) return;
-    setQuizzesLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/quizzes?course=${encodeURIComponent(course)}`);
-      const data = await res.json();
-      setLiveQuizzes(Array.isArray(data) ? data : []);
-    } finally {
-      setQuizzesLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedCourse && activeCourseTab === 'assignments') fetchLiveAssignments(selectedCourse.title);
-    if (selectedCourse && activeCourseTab === 'quizzes') fetchLiveQuizzes(selectedCourse.title);
-  }, [selectedCourse, activeCourseTab]);
-
-  // Maps a backend Assignment doc onto the same shape the existing demo
-  // table/detail UI already expects, so no rendering code has to change.
-  const mapLiveAssignment = (a) => ({
-    id: a.id,
-    _isLive: true,
-    title: a.title,
-    description: a.description || 'No description provided.',
-    topics: 'No topics',
-    dueDate: a.dueDate,
-    submissions: (a.submissions || []).map((s) => ({
-      id: s.id,
-      name: s.studentName,
-      email: s.rollNumber,
-      status: s.status,
-      approved: s.approved,
-      link: s.link,
-      description: s.description,
-      files: false,
-    })),
-  });
-
-  const mapLiveQuiz = (q) => ({
-    id: q.id,
-    _isLive: true,
-    title: q.title,
-    courses: q.course,
-    date: q.date,
-    expiry: q.expiry,
-    status: q.status,
-    results: (q.results || []).map((r) => ({
-      name: r.studentName,
-      email: r.rollNumber,
-      status: r.status,
-      score: `${r.score} / ${r.totalQuestions}`,
-      attempts: r.attempts,
-      date: r.date,
-    })),
-  });
-
-  const openNewAssignmentModal = () => {
-    setNewAssignmentForm({ title: '', description: '', dueDate: '' });
-    setAssignmentFormError('');
-    setShowNewAssignmentModal(true);
-  };
-
-  const submitNewAssignment = async () => {
-    if (!newAssignmentForm.title.trim() || !newAssignmentForm.dueDate) {
-      setAssignmentFormError('Title and due date are required.');
-      return;
-    }
-    setCreatingAssignment(true);
-    setAssignmentFormError('');
-    try {
-      const res = await fetch(`${API_BASE}/api/assignments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newAssignmentForm.title.trim(),
-          description: newAssignmentForm.description.trim(),
-          dueDate: newAssignmentForm.dueDate,
-          course: selectedCourse.title,
-          campus: selectedCourse.campus,
-          batch: selectedCourse.batch,
-          createdBy: trainerProfile.employeeId,
-          createdByName: trainerProfile.name,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to create assignment');
-      setLiveAssignments((prev) => [data, ...prev]);
-      setShowNewAssignmentModal(false);
-    } catch (err) {
-      setAssignmentFormError(err.message || 'Something went wrong. Please try again.');
-    } finally {
-      setCreatingAssignment(false);
-    }
-  };
-
-  const openNewQuizModal = () => {
-    setNewQuizForm({ title: '', date: '', expiry: '', totalQuestions: 40 });
-    setQuizFormError('');
-    setShowNewQuizModal(true);
-  };
-
-  const submitNewQuiz = async () => {
-    if (!newQuizForm.title.trim() || !newQuizForm.date || !newQuizForm.expiry) {
-      setQuizFormError('Title, date and expiry are required.');
-      return;
-    }
-    setCreatingQuiz(true);
-    setQuizFormError('');
-    try {
-      const res = await fetch(`${API_BASE}/api/quizzes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newQuizForm.title.trim(),
-          date: newQuizForm.date,
-          expiry: newQuizForm.expiry,
-          totalQuestions: Number(newQuizForm.totalQuestions) || 40,
-          course: selectedCourse.title,
-          campus: selectedCourse.campus,
-          createdBy: trainerProfile.employeeId,
-          createdByName: trainerProfile.name,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to create quiz');
-      setLiveQuizzes((prev) => [data, ...prev]);
-      setShowNewQuizModal(false);
-    } catch (err) {
-      setQuizFormError(err.message || 'Something went wrong. Please try again.');
-    } finally {
-      setCreatingQuiz(false);
-    }
-  };
-
-  // Approve / reject a submission — updates the backend for live
-  // assignments, and falls back to local-only state for the demo rows.
-  const setSubmissionApproval = async (assignment, subIdx, approved) => {
-    if (assignment._isLive) {
-      const submission = assignment.submissions[subIdx];
-      try {
-        const res = await fetch(`${API_BASE}/api/assignments/${assignment.id}/submissions/${submission.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ approved }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          setLiveAssignments((prev) => prev.map((a) => (a.id === data.id ? data : a)));
-          setSelectedAssignment(mapLiveAssignment(data));
-          setSelectedSubmission(mapLiveAssignment(data).submissions[subIdx]);
-        }
-      } catch (err) {
-        console.error('Failed to update submission:', err);
-      }
-    } else {
-      setSubApproval(assignment.id, subIdx, approved);
-    }
-  };
-
-  const submitFeedback = async (assignment, subIdx) => {
-    const key = `${assignment.id}-${subIdx}`;
-    const text = window.prompt('Feedback for this submission:', submissionFeedback[key] || '');
-    if (text === null) return;
-    setSubmissionFeedback((prev) => ({ ...prev, [key]: text }));
-    if (assignment._isLive) {
-      const submission = assignment.submissions[subIdx];
-      try {
-        await fetch(`${API_BASE}/api/assignments/${assignment.id}/submissions/${submission.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ feedback: text }),
-        });
-      } catch (err) {
-        console.error('Failed to save feedback:', err);
-      }
-    }
-  };
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
@@ -290,7 +77,7 @@ const Dashboard = ({ onLogout }) => {
     setCurrentMenu('dashboard');
     setProfileMenuOpen(false);
     if (onLogout) onLogout();
-  };
+};
 
   const startEditingProfile = () => {
     setProfileDraft(trainerProfile);
@@ -491,11 +278,6 @@ const Dashboard = ({ onLogout }) => {
     { id: 6, title: "CSS Quiz", courses: "Modern Web Application Development, Web & Mobile Application Development (Female), Web and Mobile App Development, Techno Kids Course", date: "Nov 12, 2025", expiry: "Nov 12, 2025", status: "ACTIVE", results: [] },
   ];
 
-  // Live (real, teacher-created) items first, then the original demo rows —
-  // so the page never looks empty even before any real data exists.
-  const displayedAssignments = [...liveAssignments.map(mapLiveAssignment), ...courseAssignmentsData];
-  const displayedQuizzes = [...liveQuizzes.map(mapLiveQuiz), ...courseQuizzesData];
-
   const studentQuizzesLog = [
     ["Javascript (Quiz-4)", 33, 40, 1, "Mon, Jun 15, 2026"],
     ["Javascript (Quiz-3)", 32, 40, 1, "Fri, May 22, 2026"],
@@ -614,8 +396,6 @@ const Dashboard = ({ onLogout }) => {
   // Submission state management
   const [submissionApprovals, setSubmissionApprovals] = useState({});
   const getSubApproval = (assignId, subIdx) => {
-    const liveMatch = liveAssignments.find((a) => a.id === assignId);
-    if (liveMatch) return liveMatch.submissions[subIdx]?.approved ?? null;
     const key = `${assignId}-${subIdx}`;
     if (submissionApprovals[key] !== undefined) return submissionApprovals[key];
     return courseAssignmentsData.find(a => a.id === assignId)?.submissions[subIdx]?.approved ?? null;
@@ -697,6 +477,7 @@ const Dashboard = ({ onLogout }) => {
           <div className="profile-page-wrapper animated-fade">
             <div className="profile-cover-banner" style={{ backgroundImage: `url(${PROFILE_BG_IMG})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
               <div className="profile-cover-overlay"></div>
+              {/* Photo upload wrapper */}
               <div className="profile-cover-avatar-wrap">
                 <img src={isEditingProfile ? profilePhotoDraft : profilePhoto} alt="Avatar" className="profile-cover-avatar" />
                 {isEditingProfile && (
@@ -1119,8 +900,8 @@ const Dashboard = ({ onLogout }) => {
                   {activeCourseTab === 'assignments' && !selectedAssignment && (
                     <div className="workspace-card-view">
                       <div className="tab-action-header-row">
-                        <h3>Assignments {assignmentsLoading && <span className="muted-small-text">(refreshing…)</span>}</h3>
-                        <button className="new-item-action-btn" onClick={openNewAssignmentModal}>
+                        <h3>Assignments</h3>
+                        <button className="new-item-action-btn" onClick={() => alert('New Assignment form coming soon!')}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                           New Assignment
                         </button>
@@ -1138,20 +919,19 @@ const Dashboard = ({ onLogout }) => {
                             </tr>
                           </thead>
                           <tbody>
-                            {displayedAssignments.map((asgn) => (
+                            {courseAssignmentsData.map((asgn) => (
                               <tr key={asgn.id} className={asgn.isHackathon ? 'hackathon-row' : ''}>
                                 <td>
                                   <div className="assignment-title-cell">
                                     <span className={asgn.isHackathon ? 'hackathon-title-text' : ''}>{asgn.title}</span>
                                     {asgn.isHackathon && <span className="hackathon-tag-badge">HACKATHON</span>}
-                                    {asgn._isLive && <span className="hackathon-tag-badge" style={{ background: '#dcfce7', color: '#059669' }}>LIVE</span>}
                                   </div>
                                 </td>
                                 <td className="desc-truncate-cell">{asgn.description.split('\n')[0]}{asgn.description.includes('\n') ? <span className="desc-more">...</span> : ''}</td>
                                 <td><span className="no-topics-text">{asgn.topics}</span></td>
                                 <td className={asgn.isHackathon ? 'hackathon-date-text' : ''}>{asgn.dueDate}</td>
                                 <td>
-                                  <button className="eye-action-btn" onClick={() => { setSelectedAssignment(asgn); setSelectedSubmission(asgn.submissions[0] || null); setSelectedSubmissionIdx(asgn.submissions.length ? 0 : -1); }}>
+                                  <button className="eye-action-btn" onClick={() => { setSelectedAssignment(asgn); setSelectedSubmission(asgn.submissions[0] || null); }}>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                                   </button>
                                 </td>
@@ -1214,9 +994,9 @@ const Dashboard = ({ onLogout }) => {
                             {selectedAssignment.submissions.length === 0 && <p className="muted-italic-text" style={{ padding: '16px' }}>No submissions yet.</p>}
                             {selectedAssignment.submissions.map((sub, idx) => {
                               const approval = getSubApproval(selectedAssignment.id, idx);
-                              const isActive = selectedSubmissionIdx === idx;
+                              const isActive = selectedSubmission === sub;
                               return (
-                                <div key={idx} className={`submission-list-item ${isActive ? 'sub-item-active' : ''}`} onClick={() => { setSelectedSubmission(sub); setSelectedSubmissionIdx(idx); }}>
+                                <div key={idx} className={`submission-list-item ${isActive ? 'sub-item-active' : ''}`} onClick={() => setSelectedSubmission(sub)}>
                                   <div className="sub-item-avatar-initials">{sub.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()}</div>
                                   <span className="sub-item-name">{sub.name}</span>
                                   <span className={`sub-item-badge ${sub.status === 'Late Submitted' ? 'sub-badge-late' : approval === true ? 'sub-badge-approved' : approval === false ? 'sub-badge-notapproved' : 'sub-badge-submitted'}`}>
@@ -1238,17 +1018,16 @@ const Dashboard = ({ onLogout }) => {
                               </div>
                               <div className="sub-detail-actions">
                                 {(() => {
-                                  const subIdx = selectedSubmissionIdx;
+                                  const subIdx = selectedAssignment.submissions.indexOf(selectedSubmission);
                                   const approval = getSubApproval(selectedAssignment.id, subIdx);
-                                  const feedbackKey = `${selectedAssignment.id}-${subIdx}`;
                                   return (
                                     <>
                                       <span className={`sub-status-pill ${approval === true ? 'sub-pill-approved' : approval === false ? 'sub-pill-notapproved' : 'sub-pill-pending'}`}>
                                         {approval === true ? '✓ Approved' : approval === false ? '✗ Not Approved' : 'Pending'}
                                       </span>
-                                      <button className="feedback-btn" onClick={() => submitFeedback(selectedAssignment, subIdx)}>
+                                      <button className="feedback-btn">
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                                        {submissionFeedback[feedbackKey] ? 'Edit Feedback' : 'Feedback'}
+                                        Feedback
                                       </button>
                                     </>
                                   );
@@ -1256,24 +1035,17 @@ const Dashboard = ({ onLogout }) => {
                               </div>
                             </div>
 
-                            {submissionFeedback[`${selectedAssignment.id}-${selectedSubmissionIdx}`] && (
-                              <div className="submission-detail-row">
-                                <span className="sub-detail-label">Feedback</span>
-                                <div className="sub-detail-description-box">{submissionFeedback[`${selectedAssignment.id}-${selectedSubmissionIdx}`]}</div>
-                              </div>
-                            )}
-
                             {/* Approve/Reject */}
                             <div className="submission-detail-row">
                               <span className="sub-detail-label">Submission</span>
                               <div className="sub-approval-toggle">
                                 {(() => {
-                                  const subIdx = selectedSubmissionIdx;
+                                  const subIdx = selectedAssignment.submissions.indexOf(selectedSubmission);
                                   const approval = getSubApproval(selectedAssignment.id, subIdx);
                                   return (
                                     <>
-                                      <button className={`sub-toggle-btn ${approval === true ? 'sub-toggle-approved-active' : ''}`} onClick={() => setSubmissionApproval(selectedAssignment, subIdx, true)}>Approved</button>
-                                      <button className={`sub-toggle-btn ${approval === false ? 'sub-toggle-notapproved-active' : ''}`} onClick={() => setSubmissionApproval(selectedAssignment, subIdx, false)}>Not Approved</button>
+                                      <button className={`sub-toggle-btn ${approval === true ? 'sub-toggle-approved-active' : ''}`} onClick={() => setSubApproval(selectedAssignment.id, subIdx, true)}>Approved</button>
+                                      <button className={`sub-toggle-btn ${approval === false ? 'sub-toggle-notapproved-active' : ''}`} onClick={() => setSubApproval(selectedAssignment.id, subIdx, false)}>Not Approved</button>
                                       <button className="sub-delete-btn" title="Delete">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
                                       </button>
@@ -1317,8 +1089,8 @@ const Dashboard = ({ onLogout }) => {
                   {activeCourseTab === 'quizzes' && !selectedQuiz && (
                     <div className="workspace-card-view">
                       <div className="tab-action-header-row">
-                        <h3>Quizzes {quizzesLoading && <span className="muted-small-text">(refreshing…)</span>}</h3>
-                        <button className="new-item-action-btn" onClick={openNewQuizModal}>
+                        <h3>Quizzes</h3>
+                        <button className="new-item-action-btn" onClick={() => alert('New Quiz form coming soon!')}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                           New Quiz
                         </button>
@@ -1329,9 +1101,9 @@ const Dashboard = ({ onLogout }) => {
                             <tr><th>Quiz</th><th>Course(s)</th><th>Date</th><th>Expiry</th><th>Status</th><th>Action</th></tr>
                           </thead>
                           <tbody>
-                            {displayedQuizzes.map((quiz) => (
+                            {courseQuizzesData.map((quiz) => (
                               <tr key={quiz.id}>
-                                <td style={{ fontWeight: '600' }}>{quiz.title}{quiz._isLive && <span className="hackathon-tag-badge" style={{ background: '#dcfce7', color: '#059669', marginLeft: 6 }}>LIVE</span>}</td>
+                                <td style={{ fontWeight: '600' }}>{quiz.title}</td>
                                 <td className="quiz-courses-cell">{quiz.courses}</td>
                                 <td>{quiz.date}</td>
                                 <td>{quiz.expiry}</td>
@@ -1489,148 +1261,8 @@ const Dashboard = ({ onLogout }) => {
           </>
         )}
       </main>
-
-      {/* ===== NEW ASSIGNMENT MODAL ===== */}
-      {showNewAssignmentModal && (
-        <div style={modalOverlayStyle} onClick={() => !creatingAssignment && setShowNewAssignmentModal(false)}>
-          <div style={modalCardStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeaderStyle}>
-              <h2 style={{ margin: 0, fontSize: '18px' }}>New Assignment</h2>
-              <button style={modalCloseBtnStyle} onClick={() => setShowNewAssignmentModal(false)}>✕</button>
-            </div>
-            <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
-              For {selectedCourse?.title} — visible to students the moment you save it.
-            </p>
-
-            <label style={modalLabelStyle}>Title *</label>
-            <input
-              style={modalInputStyle}
-              value={newAssignmentForm.title}
-              onChange={(e) => setNewAssignmentForm({ ...newAssignmentForm, title: e.target.value })}
-              placeholder="e.g. React Router Assignment"
-            />
-
-            <label style={modalLabelStyle}>Description</label>
-            <textarea
-              style={{ ...modalInputStyle, minHeight: '90px', resize: 'vertical' }}
-              value={newAssignmentForm.description}
-              onChange={(e) => setNewAssignmentForm({ ...newAssignmentForm, description: e.target.value })}
-              placeholder="Instructions for students..."
-            />
-
-            <label style={modalLabelStyle}>Due Date *</label>
-            <input
-              type="date"
-              style={modalInputStyle}
-              value={newAssignmentForm.dueDate}
-              onChange={(e) => setNewAssignmentForm({ ...newAssignmentForm, dueDate: e.target.value })}
-            />
-
-            {assignmentFormError && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '8px' }}>{assignmentFormError}</p>}
-
-            <div style={modalActionsStyle}>
-              <button style={modalCancelBtnStyle} onClick={() => setShowNewAssignmentModal(false)} disabled={creatingAssignment}>Cancel</button>
-              <button style={modalPrimaryBtnStyle} onClick={submitNewAssignment} disabled={creatingAssignment}>
-                {creatingAssignment ? 'Publishing…' : 'Publish Assignment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== NEW QUIZ MODAL ===== */}
-      {showNewQuizModal && (
-        <div style={modalOverlayStyle} onClick={() => !creatingQuiz && setShowNewQuizModal(false)}>
-          <div style={modalCardStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeaderStyle}>
-              <h2 style={{ margin: 0, fontSize: '18px' }}>New Quiz</h2>
-              <button style={modalCloseBtnStyle} onClick={() => setShowNewQuizModal(false)}>✕</button>
-            </div>
-            <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
-              For {selectedCourse?.title} — visible to students the moment you save it.
-            </p>
-
-            <label style={modalLabelStyle}>Quiz Title *</label>
-            <input
-              style={modalInputStyle}
-              value={newQuizForm.title}
-              onChange={(e) => setNewQuizForm({ ...newQuizForm, title: e.target.value })}
-              placeholder="e.g. Javascript (Quiz-5)"
-            />
-
-            <label style={modalLabelStyle}>Total Questions</label>
-            <input
-              type="number"
-              min="1"
-              style={modalInputStyle}
-              value={newQuizForm.totalQuestions}
-              onChange={(e) => setNewQuizForm({ ...newQuizForm, totalQuestions: e.target.value })}
-            />
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <div style={{ flex: 1 }}>
-                <label style={modalLabelStyle}>Date *</label>
-                <input
-                  type="date"
-                  style={modalInputStyle}
-                  value={newQuizForm.date}
-                  onChange={(e) => setNewQuizForm({ ...newQuizForm, date: e.target.value })}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={modalLabelStyle}>Expiry *</label>
-                <input
-                  type="date"
-                  style={modalInputStyle}
-                  value={newQuizForm.expiry}
-                  onChange={(e) => setNewQuizForm({ ...newQuizForm, expiry: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {quizFormError && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '8px' }}>{quizFormError}</p>}
-
-            <div style={modalActionsStyle}>
-              <button style={modalCancelBtnStyle} onClick={() => setShowNewQuizModal(false)} disabled={creatingQuiz}>Cancel</button>
-              <button style={modalPrimaryBtnStyle} onClick={submitNewQuiz} disabled={creatingQuiz}>
-                {creatingQuiz ? 'Publishing…' : 'Publish Quiz'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-};
-
-// Inline styles for the New Assignment / New Quiz modals — kept local so
-// this component doesn't depend on new classes being added to Dashboard.css.
-const modalOverlayStyle = {
-  position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px',
-};
-const modalCardStyle = {
-  background: '#fff', borderRadius: '14px', padding: '24px', width: '100%', maxWidth: '440px',
-  boxShadow: '0 20px 40px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto',
-};
-const modalHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center' };
-const modalCloseBtnStyle = {
-  background: '#f1f5f9', border: 'none', borderRadius: '8px', width: '28px', height: '28px',
-  cursor: 'pointer', fontSize: '14px', color: '#475569',
-};
-const modalLabelStyle = { display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginTop: '14px', marginBottom: '6px' };
-const modalInputStyle = {
-  width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0',
-  fontSize: '14px', boxSizing: 'border-box', fontFamily: 'inherit',
-};
-const modalActionsStyle = { display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px' };
-const modalCancelBtnStyle = {
-  padding: '9px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff',
-  cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#334155',
-};
-const modalPrimaryBtnStyle = {
-  padding: '9px 18px', borderRadius: '8px', border: 'none', background: '#4f46e5',
-  cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#fff',
 };
 
 export default Dashboard;

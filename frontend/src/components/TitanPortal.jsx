@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './TitanPortal.css';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-
 export default function TitanPortal({ onLoginSuccess }) {
   const navigate = useNavigate();
   const [view, setView] = useState('student-login');
@@ -13,8 +11,6 @@ export default function TitanPortal({ onLoginSuccess }) {
   const [dob, setDob] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   const handleViewChange = (newView) => {
     setView(newView);
@@ -23,68 +19,26 @@ export default function TitanPortal({ onLoginSuccess }) {
     setDob('');
     setPassword('');
     setShowPassword(false);
-    setLoading(false);
-    setError('');
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
 
-    try {
-      if (view === 'teacher-login') {
-        // Demo trainer login
-        if (email === 'drhasnain953@gmail.com' && password === '2008hasanin') {
-          onLoginSuccess('trainer', { name: "Dr. Hasnain", email: email });
-        } else {
-          setError('Invalid Trainer Email or Password!');
-        }
-        setLoading(false);
-        return;
+    if (view === 'teacher-login') {
+      if (email === 'drhasnain953@gmail.com' && password === '2008hasanin') {
+        onLoginSuccess('trainer', { name: "Dr. Hasnain", email: email });
+      } else {
+        alert("Invalid Trainer Email or Password!");
       }
-
-      if (view === 'student-login') {
-        // Real student login API
-        const response = await fetch(`${API_BASE}/api/students/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cnic: cnic.trim(), password }),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          setError(data.message || 'Login failed.');
-          setLoading(false);
-          return;
-        }
-        // Login successful
-        onLoginSuccess('student', data);
-        setLoading(false);
-        return;
+    } else if (view === 'student-login') {
+      if (cnic.trim() === '4550290108391' && password === 'Hasnain') {
+        onLoginSuccess('student', { name: "Hasnain", cnic: cnic });
+      } else {
+        alert("Invalid CNIC or Password!");
       }
-
-      if (view === 'student-register') {
-        // Create password API
-        const response = await fetch(`${API_BASE}/api/students/set-password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cnic: cnic.trim(), dob, newPassword: password }),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          setError(data.message || 'Password creation failed.');
-          setLoading(false);
-          return;
-        }
-        alert(data.message);
-        handleViewChange('student-login');
-        setLoading(false);
-        return;
-      }
-    } catch (error) {
-      console.error('Request error:', error);
-      setError('Could not connect to server. Please try again.');
-      setLoading(false);
+    } else if (view === 'student-register') {
+      alert("Password created successfully! Kindly switch to Login tab.");
+      handleViewChange('student-login');
     }
   };
 
@@ -115,7 +69,6 @@ export default function TitanPortal({ onLoginSuccess }) {
               type="button"
               className={`tab-btn ${view === 'student-login' ? 'active' : ''}`}
               onClick={() => handleViewChange('student-login')}
-              disabled={loading}
             >
               Login
             </button>
@@ -123,7 +76,6 @@ export default function TitanPortal({ onLoginSuccess }) {
               type="button"
               className={`tab-btn ${view === 'student-register' ? 'active' : ''}`}
               onClick={() => handleViewChange('student-register')}
-              disabled={loading}
             >
               Create Password
             </button>
@@ -149,7 +101,6 @@ export default function TitanPortal({ onLoginSuccess }) {
                   value={cnic} 
                   onChange={(e) => setCnic(e.target.value.replace(/[^0-9]/g, ''))} 
                   required 
-                  disabled={loading}
                 />
               </div>
             </>
@@ -171,7 +122,6 @@ export default function TitanPortal({ onLoginSuccess }) {
                   value={cnic} 
                   onChange={(e) => setCnic(e.target.value.replace(/[^0-9]/g, ''))} 
                   required 
-                  disabled={loading}
                 />
               </div>
 
@@ -182,7 +132,6 @@ export default function TitanPortal({ onLoginSuccess }) {
                   value={dob} 
                   onChange={(e) => setDob(e.target.value)} 
                   required 
-                  disabled={loading}
                 />
               </div>
             </>
@@ -203,7 +152,6 @@ export default function TitanPortal({ onLoginSuccess }) {
                   value={email} 
                   onChange={(e) => setEmail(e.target.value)} 
                   required 
-                  disabled={loading}
                 />
               </div>
             </>
@@ -215,47 +163,24 @@ export default function TitanPortal({ onLoginSuccess }) {
             <div className="password-wrapper">
               <input 
                 type={showPassword ? "text" : "password"} 
-                placeholder={view === 'student-register' ? "Create a new password (min 6 characters)" : "Enter password"}
+                placeholder="Enter password"
                 value={password} 
                 onChange={(e) => setPassword(e.target.value)} 
                 required 
-                minLength={view === 'student-register' ? 6 : undefined}
-                disabled={loading}
               />
               <button 
                 type="button" 
                 className="toggle-password-text"
                 onClick={() => setShowPassword(!showPassword)}
-                disabled={loading}
               >
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
-            {view === 'student-register' && (
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Password must be at least 6 characters long.
-              </p>
-            )}
           </div>
 
-          {/* Error Message */}
-          {error && (
-            <div style={{ 
-              color: '#dc2626', 
-              fontSize: '0.85rem', 
-              padding: '8px 12px', 
-              background: '#fef2f2', 
-              borderRadius: '6px',
-              border: '1px solid #fecaca',
-              marginBottom: '10px'
-            }}>
-              {error}
-            </div>
-          )}
-
           {/* Action Buttons */}
-          <button type="submit" className="submit-btn" disabled={loading}>
-            {loading ? 'Processing...' : (view === 'student-register' ? 'CREATE PASSWORD' : 'LOGIN')}
+          <button type="submit" className="submit-btn">
+            {view === 'student-register' ? 'SUBMIT' : 'LOGIN'}
           </button>
 
           {view === 'teacher-login' && (
@@ -271,7 +196,6 @@ export default function TitanPortal({ onLoginSuccess }) {
             type="button"
             className="switch-portal-btn"
             onClick={() => handleViewChange('student-login')}
-            disabled={loading}
           >
             Login as student
           </button>
@@ -280,12 +204,34 @@ export default function TitanPortal({ onLoginSuccess }) {
             type="button"
             className="switch-portal-btn"
             onClick={() => handleViewChange('teacher-login')}
-            disabled={loading}
           >
             Login as teacher
           </button>
         )}
       </div>
+
+      {/* ══════ Admin Portal Link ══════ */}
+      {/* <div style={{ textAlign: 'center', marginTop: '16px' }}>
+        <button
+          type="button"
+          onClick={() => navigate('')}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#555',
+            fontSize: '12px',
+            cursor: 'pointer',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            transition: 'color 0.2s',
+            fontFamily: 'inherit',
+          }}
+          onMouseEnter={(e) => (e.target.style.color = '#1a3c6e')}
+          onMouseLeave={(e) => (e.target.style.color = '#555')}
+        >
+          
+        </button>
+      </div>*/}
     </div>
   );
 }

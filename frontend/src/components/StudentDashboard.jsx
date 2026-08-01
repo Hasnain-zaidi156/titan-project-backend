@@ -1,12 +1,114 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import "./StudentDashboard.css"
 
 const TITAN_LOGO = "https://i.ibb.co/q3c3CkLS/titan-logo.jpg"
 const SIR_YASIR_PHOTO = "https://i.ibb.co/pB0qFxpB/new-pic-2.jpg"
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"
 
-export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", onLogout }) {
+// studentId = Mongo _id of the logged-in student (from DB record).
+// rollNumber/course/campus default to the demo student shown in this file
+// so the portal still looks right before real login data is wired in.
+export default function StudentDashboard({
+  studentName = "Syed Hasnain Zaidi",
+  studentId = null,
+  rollNumber = "467643",
+  course = "Modern Web Application Development",
+  campus = "Saylani TITAN Sukkur Campus",
+  onLogout,
+}) {
+  // ===== Live voucher / invoices (backend-synced) =====
+  const [liveInvoices, setLiveInvoices] = useState(null) // null = not fetched yet
+  const [generatingVoucher, setGeneratingVoucher] = useState(false)
+  const [voucherError, setVoucherError] = useState("")
+
+  // ===== Live assignments / quizzes created by trainers (backend-synced) =====
+  const [liveAssignments, setLiveAssignments] = useState([])
+  const [liveQuizzes, setLiveQuizzes] = useState([])
+
+  // ===== Assignment Detail modal (view + submit) =====
+  const [assignmentModal, setAssignmentModal] = useState(null) // the assignment object, or null when closed
+  const [submitForm, setSubmitForm] = useState({ link: "", description: "" })
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState("")
+
+  const openAssignmentModal = (a) => {
+    const mySub = a.submissions.find((s) => s.rollNumber === rollNumber)
+    setSubmitForm({ link: mySub?.link || "", description: mySub?.description || "" })
+    setSubmitError("")
+    setAssignmentModal(a)
+  }
+
+  const submitAssignment = async () => {
+    if (!submitForm.link.trim()) {
+      setSubmitError("Please add a submission link.")
+      return
+    }
+    setSubmitting(true)
+    setSubmitError("")
+    try {
+      const res = await fetch(`${API_BASE}/api/assignments/${assignmentModal.id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rollNumber, studentName, link: submitForm.link.trim(), description: submitForm.description.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || "Submission failed")
+      setLiveAssignments((prev) => prev.map((x) => (x.id === data.id ? data : x)))
+      setAssignmentModal(data)
+    } catch (err) {
+      setSubmitError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const fetchLiveAssignments = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/assignments?course=${encodeURIComponent(course)}`)
+      const data = await res.json()
+      setLiveAssignments(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error("Failed to load assignments:", err)
+    }
+  }
+
+  const fetchLiveQuizzes = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/quizzes?course=${encodeURIComponent(course)}`)
+      const data = await res.json()
+      setLiveQuizzes(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error("Failed to load quizzes:", err)
+    }
+  }
+
+  useEffect(() => {
+    fetchLiveAssignments()
+    fetchLiveQuizzes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [course])
+
+  const generateVoucher = async () => {
+    if (!studentId) {
+      setVoucherError("Voucher generation needs your account to be linked. Please contact admin.")
+      return
+    }
+    setGeneratingVoucher(true)
+    setVoucherError("")
+    try {
+      const res = await fetch(`${API_BASE}/api/students/${studentId}/generate-voucher`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || "Failed to generate voucher")
+      setLiveInvoices(data.student.invoices)
+    } catch (err) {
+      setVoucherError(err.message || "Something went wrong. Please try again.")
+    } finally {
+      setGeneratingVoucher(false)
+    }
+  }
+
   const [studentView, setStudentView] = useState("home")
   const [studentActiveMenu, setStudentActiveMenu] = useState("dashboard")
   const [studentSidebarOpen, setStudentSidebarOpen] = useState(false)
@@ -481,11 +583,32 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
         </div>
       </div>
       <div className="workspace-card-view" style={{ marginTop: 20 }}>
-        <h3>Fee Records</h3>
-        <div className="table-responsive-wrapper">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <h3 style={{ margin: 0 }}>Fee Records</h3>
+          <button
+            className="student-view-details-btn"
+            style={{ opacity: generatingVoucher ? 0.7 : 1 }}
+            onClick={generateVoucher}
+            disabled={generatingVoucher || (liveInvoices || []).some((inv) => inv.status === "PENDING")}
+          >
+            {generatingVoucher ? "Generating..." : "Generate Voucher"}
+          </button>
+        </div>
+        {voucherError && <p style={{ color: "var(--red-color, #ef4444)", fontSize: "0.85rem", marginTop: 8 }}>{voucherError}</p>}
+        <div className="table-responsive-wrapper" style={{ marginTop: 12 }}>
           <table className="client-data-table s-fee-table">
             <thead><tr><th>Month</th><th>Amount</th><th>Type</th><th>Due date</th><th>Voucher ID</th><th>Status</th></tr></thead>
             <tbody>
+              {(liveInvoices || []).map((inv, i) => (
+                <tr key={`live-${i}`}>
+                  <td>{inv.month}</td>
+                  <td>Rs: {inv.amount} /-</td>
+                  <td>{inv.type}</td>
+                  <td>{inv.dueDate}</td>
+                  <td style={{ fontSize: "0.8rem" }}>{inv.invoiceNumber}</td>
+                  <td><span className={inv.status === "PAID" ? "badge-present-status" : "s-att-badge s-att-leave"}>{inv.status}</span></td>
+                </tr>
+              ))}
               {feeRecords.map((r, i) => (
                 <tr key={i}><td>{r.month}</td><td>{r.amount}</td><td>{r.type}</td><td>{r.dueDate}</td><td style={{ fontSize: "0.8rem" }}>{r.voucherId}</td><td><span className="badge-present-status">{r.status}</span></td></tr>
               ))}
@@ -520,6 +643,25 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
           <table className="client-data-table s-assign-table">
             <thead><tr><th>Assignment</th><th>Course</th><th>Due Date</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
+              {liveAssignments.map((a) => {
+                const mySub = a.submissions.find((s) => s.rollNumber === rollNumber)
+                const status = mySub ? (mySub.approved === true ? "APPROVED" : mySub.approved === false ? "NOT APPROVED" : mySub.status.toUpperCase()) : "NOT SUBMITTED"
+                return (
+                  <tr key={a.id}>
+                    <td className="s-assign-title" style={{ cursor: "pointer" }} onClick={() => openAssignmentModal(a)}>
+                      {a.title} <span className="s-att-badge s-att-present" style={{ marginLeft: 6 }}>LIVE</span>
+                    </td>
+                    <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{a.course}</td>
+                    <td>{a.dueDate}</td>
+                    <td><span className={`s-assign-badge s-assign-${status.replace(/\s/g, "").toLowerCase()}`}>{status}</span></td>
+                    <td>
+                      <button className="s-btn-outline" style={{ padding: "4px 10px", fontSize: "0.75rem" }} onClick={() => openAssignmentModal(a)}>
+                        {mySub ? "View" : "Submit"}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
               {paginatedAssignments.map((a, i) => (
                 <tr key={i}><td className="s-assign-title">{a.title}</td><td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{a.course}</td><td>{a.dueDate}</td><td><span className={`s-assign-badge s-assign-${a.status.replace(/\s/g, "").toLowerCase()}`}>{a.status}</span></td><td><span className="s-action-completed">Completed</span></td></tr>
               ))}
@@ -567,6 +709,45 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
           <table className="client-data-table s-quiz-table">
             <thead><tr><th>Module</th><th>Title</th><th>Questions</th><th>Attempts</th><th>Score</th><th>Percentage</th><th>Status</th><th>Note</th><th>Action</th></tr></thead>
             <tbody>
+              {liveQuizzes.map((q) => {
+                const myResult = q.results.find((r) => r.rollNumber === rollNumber)
+                const pct = myResult ? Math.round((myResult.score / myResult.totalQuestions) * 100) : 0
+                return (
+                  <tr key={q.id}>
+                    <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{q.course} <span className="s-att-badge s-att-present" style={{ marginLeft: 6 }}>LIVE</span></td>
+                    <td className="s-quiz-title">{q.title}</td>
+                    <td>{q.totalQuestions}</td>
+                    <td>{myResult?.attempts || 0}</td>
+                    <td>{myResult ? `${myResult.score} / ${myResult.totalQuestions}` : "—"}</td>
+                    <td>{myResult ? <span className={`s-quiz-pct s-quiz-${myResult.status.toLowerCase()}`}>{pct}%</span> : "—"}</td>
+                    <td>{myResult ? <span className={`s-quiz-badge s-quiz-${myResult.status.toLowerCase()}`}>{myResult.status}</span> : <span className="s-quiz-badge">PENDING</span>}</td>
+                    <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>—</td>
+                    <td>
+                      <button
+                        className="s-btn-outline"
+                        style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                        onClick={async () => {
+                          const scoreStr = window.prompt(`Enter your score out of ${q.totalQuestions}:`, myResult?.score || "")
+                          if (scoreStr === null) return
+                          const score = Number(scoreStr)
+                          if (Number.isNaN(score)) return
+                          try {
+                            const res = await fetch(`${API_BASE}/api/quizzes/${q.id}/result`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ rollNumber, studentName, score, totalQuestions: q.totalQuestions }),
+                            })
+                            const data = await res.json()
+                            if (res.ok) setLiveQuizzes((prev) => prev.map((x) => (x.id === data.id ? data : x)))
+                          } catch (err) { console.error("Submit result failed:", err) }
+                        }}
+                      >
+                        {myResult ? "Retry" : "Submit"}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
               {quizzesData.map((q, i) => (
                 <tr key={i}><td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{q.module}</td><td className="s-quiz-title">{q.title}</td><td>{q.questions}</td><td>{q.attempts}</td><td>{q.score}</td><td><span className={`s-quiz-pct s-quiz-${q.status.toLowerCase()}`}>{q.pct}%</span></td><td><span className={`s-quiz-badge s-quiz-${q.status.toLowerCase()}`}>{q.status}</span></td><td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{q.note || "—"}</td><td><span className="s-action-completed">Completed</span></td></tr>
               ))}
@@ -577,6 +758,87 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
       </div>
     </div>
   )
+
+  // ========== RENDER: ASSIGNMENT DETAIL MODAL ==========
+  const renderAssignmentModal = () => {
+    if (!assignmentModal) return null
+    const a = assignmentModal
+    const mySub = a.submissions.find((s) => s.rollNumber === rollNumber)
+    const status = mySub ? (mySub.approved === true ? "APPROVED" : mySub.approved === false ? "NOT APPROVED" : mySub.status.toUpperCase()) : "NOT SUBMITTED"
+    const statusClass = status === "APPROVED" ? "badge-present-status" : status === "NOT APPROVED" ? "s-att-badge s-att-absent" : "s-att-badge s-att-leave"
+
+    return (
+      <div className="s-modal-overlay" onClick={() => setAssignmentModal(null)}>
+        <div className="s-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="s-modal-header">
+            <h2>Assignment Information</h2>
+            <button className="s-modal-close" onClick={() => setAssignmentModal(null)}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+
+          <div className="s-feedback-type-label">Title</div>
+          <p style={{ fontWeight: 700, fontSize: "1.05rem", margin: "2px 0 14px" }}>{a.title}</p>
+
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <div>
+              <div className="s-feedback-type-label">Due Date</div>
+              <p style={{ margin: 0 }}>{a.dueDate}</p>
+            </div>
+            <div>
+              <div className="s-feedback-type-label">Status</div>
+              <span className={statusClass}>{status}</span>
+            </div>
+          </div>
+
+          {a.description && (
+            <>
+              <div className="s-feedback-type-label" style={{ marginTop: 16 }}>Description</div>
+              <div className="sub-detail-description-box">{a.description}</div>
+            </>
+          )}
+
+          <hr style={{ margin: "18px 0", border: "none", borderTop: "1px solid var(--border-color, #eee)" }} />
+
+          <div className="s-feedback-type-label" style={{ fontSize: "0.95rem", fontWeight: 700 }}>Submission Details</div>
+
+          {mySub && (
+            <div style={{ marginTop: 8 }}>
+              <div className="s-feedback-type-label">Submitted On</div>
+              <p style={{ margin: "0 0 10px" }}>{mySub.submittedAt ? new Date(mySub.submittedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "—"}</p>
+            </div>
+          )}
+
+          <div className="s-feedback-type-label">Submission Link *</div>
+          <input
+            className="s-feedback-textarea"
+            style={{ minHeight: "auto", padding: "10px 12px" }}
+            placeholder="https://github.com/... or Google Drive link"
+            value={submitForm.link}
+            onChange={(e) => setSubmitForm({ ...submitForm, link: e.target.value })}
+          />
+
+          <div className="s-feedback-type-label">Submission Notes</div>
+          <textarea
+            className="s-feedback-textarea"
+            placeholder="Anything you'd like your trainer to know..."
+            rows={3}
+            value={submitForm.description}
+            onChange={(e) => setSubmitForm({ ...submitForm, description: e.target.value })}
+          />
+
+          {submitError && <p style={{ color: "var(--red-color, #ef4444)", fontSize: "0.85rem", marginTop: 8 }}>{submitError}</p>}
+
+          <div className="s-modal-actions">
+            <button className="s-btn-cancel" onClick={() => setAssignmentModal(null)}>Close</button>
+            <button className="s-btn-send" onClick={submitAssignment} disabled={submitting}>
+              {submitting ? "Submitting..." : mySub ? "Update Submission" : "Submit"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // ========== RENDER: PROFILE ==========
   const renderProfile = () => (
@@ -681,6 +943,7 @@ export default function StudentDashboard({ studentName = "Syed Hasnain Zaidi", o
   return (
     <div className="portal-container">
       {renderFeedbackModal()}
+      {renderAssignmentModal()}
 
       <div className="mobile-header-notch-bar">
         <button className="mobile-hamburger-btn" onClick={() => setStudentSidebarOpen(!studentSidebarOpen)} aria-label="Menu">

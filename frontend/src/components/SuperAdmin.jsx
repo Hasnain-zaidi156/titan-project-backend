@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 import "./SuperAdmin.css";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
 const TITAN_LOGO = "https://i.ibb.co/q3c3CkLS/titan-logo.jpg";
 
@@ -480,6 +480,7 @@ const SEED_STUDENTS = [
     studentName: "Muhammad Hassan",
     fatherName: "Muhammad Afzal",
     cnic: "45504-0805007-3",
+    dob: "",
     phone: "0310-3589178",
     course: "Mobile App Development",
     status: "enrolled",
@@ -511,6 +512,7 @@ const SEED_STUDENTS = [
     studentName: "Ayesha Khan",
     fatherName: "Imran Khan",
     cnic: "45201-1234567-8",
+    dob: "",
     phone: "0300-1234567",
     course: "Graphic Designing",
     status: "pending",
@@ -532,6 +534,7 @@ const SEED_STUDENTS = [
     studentName: "Bilal Ahmed",
     fatherName: "Tariq Ahmed",
     cnic: "45100-9876543-2",
+    dob: "",
     phone: "0321-1234567",
     course: "Web Development",
     status: "completed",
@@ -563,6 +566,7 @@ const EMPTY_FORM = {
   studentName: "",
   fatherName: "",
   cnic: "",
+  dob: "",
   phone: "",
   country: "Pakistan",
   city: CITIES[0],
@@ -586,6 +590,7 @@ function validateStudentForm(form) {
   if (!form.studentName.trim()) errors.studentName = "Required";
   if (!form.fatherName.trim()) errors.fatherName = "Required";
   if (!CNIC_PATTERN.test(form.cnic.trim())) errors.cnic = "Format: 00000-0000000-0";
+  if (!form.dob) errors.dob = "Required — needed for student's Create Password login";
   if (!PHONE_PATTERN.test(form.phone.trim())) errors.phone = "Format: 03XXXXXXXXX";
   return errors;
 }
@@ -916,6 +921,24 @@ function StudentFormModal({ title, initialValues, onClose, onSave, saving, serve
             {errors.cnic && <p className="ta-field-error-msg">{errors.cnic}</p>}
           </div>
           <div className="ta-filter-field">
+            <label>Date of Birth *</label>
+            <div className="ta-date-range-wrap">
+              <input
+                type="date"
+                className={errors.dob ? "ta-form-input-error" : ""}
+                required
+                value={form.dob}
+                onChange={(e) => set("dob", e.target.value)}
+                aria-label="Date of birth"
+              />
+              <Icon path={ICONS.calendar} size={15} />
+            </div>
+            <p className="ta-field-hint" style={{ fontSize: 11, color: "var(--ta-text-muted)", marginTop: 4 }}>
+              Student "Create Password" screen par CNIC + DOB se identity verify hoti hai — is field ke bina wo login nahi bana sakega.
+            </p>
+            {errors.dob && <p className="ta-field-error-msg">{errors.dob}</p>}
+          </div>
+          <div className="ta-filter-field">
             <label>Phone *</label>
             <input
               className={`ta-form-input ${errors.phone ? "ta-form-input-error" : ""}`}
@@ -1011,6 +1034,7 @@ function ViewStudentModal({ student, onClose }) {
     ["Student name", student.studentName],
     ["Father name", student.fatherName],
     ["CNIC", student.cnic],
+    ["Date of Birth", student.dob],
     ["Phone", student.phone],
     ["Country", student.country],
     ["City", student.city],

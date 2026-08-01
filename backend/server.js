@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -71,6 +72,15 @@ const studentSchema = new mongoose.Schema({
   paymentStatus: { type: String, default: 'Not Generated' },
   gender: { type: String, default: 'Male' },
   laptop: { type: String, default: 'No' },
+  email: { type: String, default: '' },
+  dob: { type: String, default: '' },
+  address: { type: String, default: '' },
+  fatherPhone: { type: String, default: '' },
+  computerProficiency: { type: String, default: '' },
+  lastQualification: { type: String, default: '' },
+  hearAboutUs: { type: String, default: '' },
+  password: { type: String, default: '' }, // bcrypt hash — never sent to the frontend
+  accountActivated: { type: Boolean, default: false }, // true once the student has set their own password
   invoices: [invoiceSchema],
 }, { timestamps: true });
 
@@ -138,6 +148,66 @@ const trainerAttendanceRequestSchema = new mongoose.Schema({
 
 const TrainerAttendanceRequest = mongoose.model('TrainerAttendanceRequest', trainerAttendanceRequestSchema);
 
+// ================= ASSIGNMENT SCHEMA & MODEL =================
+// Created by a trainer from the Teacher Portal (Course > Assignments > New
+// Assignment). Students on that course/campus see it live in their portal,
+// and can submit; the trainer approves/rejects each submission.
+const assignmentSubmissionSchema = new mongoose.Schema({
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+  rollNumber: { type: String, required: true },
+  studentName: { type: String, required: true },
+  link: { type: String, default: '' },
+  description: { type: String, default: '' },
+  status: { type: String, default: 'Submitted' }, // Submitted | Late Submitted
+  approved: { type: Boolean, default: null }, // null = pending
+  feedback: { type: String, default: '' },
+  submittedAt: { type: Date, default: Date.now },
+});
+
+const assignmentSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  description: { type: String, default: '' },
+  course: { type: String, required: true },
+  campus: { type: String, default: '' },
+  batch: { type: String, default: '' },
+  dueDate: { type: String, required: true },
+  createdBy: { type: String, default: '' }, // trainer employeeId
+  createdByName: { type: String, default: '' },
+  submissions: [assignmentSubmissionSchema],
+}, { timestamps: true });
+
+const Assignment = mongoose.model('Assignment', assignmentSchema);
+
+// ================= QUIZ SCHEMA & MODEL =================
+// Created by a trainer from the Teacher Portal (Course > Quizzes > New
+// Quiz). Students on that course see it live in their portal and can
+// submit a result; results appear back on the trainer's "View Results" page.
+const quizResultSchema = new mongoose.Schema({
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+  rollNumber: { type: String, required: true },
+  studentName: { type: String, required: true },
+  score: { type: Number, default: 0 },
+  totalQuestions: { type: Number, default: 0 },
+  attempts: { type: Number, default: 1 },
+  status: { type: String, default: 'PENDING' }, // PASSED | FAILED
+  date: { type: String, default: '' },
+});
+
+const quizSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  course: { type: String, required: true },
+  campus: { type: String, default: '' },
+  totalQuestions: { type: Number, default: 40 },
+  date: { type: String, required: true },
+  expiry: { type: String, required: true },
+  status: { type: String, default: 'ACTIVE' },
+  createdBy: { type: String, default: '' },
+  createdByName: { type: String, default: '' },
+  results: [quizResultSchema],
+}, { timestamps: true });
+
+const Quiz = mongoose.model('Quiz', quizSchema);
+
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
 // Maps a Mongoose student document to the plain shape the frontend expects
@@ -162,6 +232,10 @@ function serializeStudent(doc) {
     paymentStatus: doc.paymentStatus,
     gender: doc.gender,
     laptop: doc.laptop,
+    email: doc.email || '',
+    dob: doc.dob || '',
+    address: doc.address || '',
+    accountActivated: !!doc.accountActivated,
     invoices: doc.invoices || [],
   };
 }
@@ -219,6 +293,59 @@ function serializeTrainerAttendanceRequest(doc) {
     type: doc.type,
     status: doc.status,
     reason: doc.reason || '',
+  };
+}
+
+function serializeAssignment(doc) {
+  return {
+    id: doc._id.toString(),
+    title: doc.title,
+    description: doc.description || '',
+    course: doc.course,
+    campus: doc.campus || '',
+    batch: doc.batch || '',
+    dueDate: doc.dueDate,
+    createdBy: doc.createdBy || '',
+    createdByName: doc.createdByName || '',
+    createdAt: doc.createdAt,
+    submissions: (doc.submissions || []).map((s) => ({
+      id: s._id.toString(),
+      studentId: s.studentId?.toString(),
+      rollNumber: s.rollNumber,
+      studentName: s.studentName,
+      link: s.link || '',
+      description: s.description || '',
+      status: s.status,
+      approved: s.approved,
+      feedback: s.feedback || '',
+      submittedAt: s.submittedAt,
+    })),
+  };
+}
+
+function serializeQuiz(doc) {
+  return {
+    id: doc._id.toString(),
+    title: doc.title,
+    course: doc.course,
+    campus: doc.campus || '',
+    totalQuestions: doc.totalQuestions,
+    date: doc.date,
+    expiry: doc.expiry,
+    status: doc.status,
+    createdBy: doc.createdBy || '',
+    createdByName: doc.createdByName || '',
+    results: (doc.results || []).map((r) => ({
+      id: r._id.toString(),
+      studentId: r.studentId?.toString(),
+      rollNumber: r.rollNumber,
+      studentName: r.studentName,
+      score: r.score,
+      totalQuestions: r.totalQuestions,
+      attempts: r.attempts,
+      status: r.status,
+      date: r.date,
+    })),
   };
 }
 
@@ -886,6 +1013,426 @@ app.post('/api/trainer-attendance-requests', async (req, res) => {
   } catch (error) {
     console.error('Create trainer attendance request error:', error);
     res.status(500).json({ message: 'Failed to submit request', error: error.message });
+  }
+});
+
+// ================= ASSIGNMENT API ENDPOINTS =================
+// Teacher Portal: Course > Assignments tab reads/writes these. Student
+// Portal filters by course (and campus, if provided) so a new assignment
+// created by a trainer shows up live for their students.
+
+// GET: List assignments, optionally filtered by ?course= & ?campus=
+app.get('/api/assignments', async (req, res) => {
+  try {
+    if (!isDbConnected()) return res.json([]);
+    const filter = {};
+    if (req.query.course) filter.course = req.query.course;
+    if (req.query.campus) filter.campus = req.query.campus;
+    const assignments = await Assignment.find(filter).sort({ createdAt: -1 });
+    res.json(assignments.map(serializeAssignment));
+  } catch (error) {
+    console.error('Fetch assignments error:', error);
+    res.status(500).json({ message: 'Failed to fetch assignments', error: error.message });
+  }
+});
+
+// POST: Trainer creates a new assignment (the "New Assignment" button)
+app.post('/api/assignments', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { title, description, course, campus, batch, dueDate, createdBy, createdByName } = req.body;
+    if (!title || !course || !dueDate) {
+      return res.status(400).json({ message: 'title, course and dueDate are required' });
+    }
+    const created = await Assignment.create({
+      title, description, course, campus, batch, dueDate, createdBy, createdByName, submissions: [],
+    });
+    res.status(201).json(serializeAssignment(created));
+  } catch (error) {
+    console.error('Create assignment error:', error);
+    res.status(500).json({ message: 'Failed to create assignment', error: error.message });
+  }
+});
+
+// PUT: Trainer edits an assignment's details
+app.put('/api/assignments/:id', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const updated = await Assignment.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Assignment not found' });
+    res.json(serializeAssignment(updated));
+  } catch (error) {
+    console.error('Update assignment error:', error);
+    res.status(500).json({ message: 'Failed to update assignment', error: error.message });
+  }
+});
+
+// DELETE: Remove an assignment
+app.delete('/api/assignments/:id', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const deleted = await Assignment.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: 'Assignment not found' });
+    res.json({ message: 'Deleted', id: req.params.id });
+  } catch (error) {
+    console.error('Delete assignment error:', error);
+    res.status(500).json({ message: 'Failed to delete assignment', error: error.message });
+  }
+});
+
+// POST: Student submits (or re-submits) their work for an assignment
+app.post('/api/assignments/:id/submit', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { rollNumber, studentName, link, description } = req.body;
+    if (!rollNumber || !studentName) {
+      return res.status(400).json({ message: 'rollNumber and studentName are required' });
+    }
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+
+    const isLate = new Date() > new Date(assignment.dueDate);
+    const existingIdx = assignment.submissions.findIndex((s) => s.rollNumber === rollNumber);
+    const submissionData = {
+      rollNumber, studentName, link: link || '', description: description || '',
+      status: isLate ? 'Late Submitted' : 'Submitted', approved: null, submittedAt: new Date(),
+    };
+
+    if (existingIdx >= 0) {
+      assignment.submissions[existingIdx].set(submissionData);
+    } else {
+      assignment.submissions.push(submissionData);
+    }
+    await assignment.save();
+    res.json(serializeAssignment(assignment));
+  } catch (error) {
+    console.error('Submit assignment error:', error);
+    res.status(500).json({ message: 'Failed to submit assignment', error: error.message });
+  }
+});
+
+// PUT: Trainer approves/rejects one student's submission
+app.put('/api/assignments/:id/submissions/:subId', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+
+    const submission = assignment.submissions.id(req.params.subId);
+    if (!submission) return res.status(404).json({ message: 'Submission not found' });
+
+    if (typeof req.body.approved === 'boolean') submission.approved = req.body.approved;
+    if (typeof req.body.feedback === 'string') submission.feedback = req.body.feedback;
+    await assignment.save();
+    res.json(serializeAssignment(assignment));
+  } catch (error) {
+    console.error('Update submission error:', error);
+    res.status(500).json({ message: 'Failed to update submission', error: error.message });
+  }
+});
+
+// ================= QUIZ API ENDPOINTS =================
+// Teacher Portal: Course > Quizzes tab reads/writes these. Student Portal
+// filters by ?course= so a new quiz created by a trainer shows up live.
+
+// GET: List quizzes, optionally filtered by ?course=
+app.get('/api/quizzes', async (req, res) => {
+  try {
+    if (!isDbConnected()) return res.json([]);
+    const filter = {};
+    if (req.query.course) filter.course = req.query.course;
+    const quizzes = await Quiz.find(filter).sort({ createdAt: -1 });
+    res.json(quizzes.map(serializeQuiz));
+  } catch (error) {
+    console.error('Fetch quizzes error:', error);
+    res.status(500).json({ message: 'Failed to fetch quizzes', error: error.message });
+  }
+});
+
+// POST: Trainer creates a new quiz (the "New Quiz" button)
+app.post('/api/quizzes', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { title, course, campus, totalQuestions, date, expiry, createdBy, createdByName } = req.body;
+    if (!title || !course || !date || !expiry) {
+      return res.status(400).json({ message: 'title, course, date and expiry are required' });
+    }
+    const created = await Quiz.create({
+      title, course, campus, totalQuestions: totalQuestions || 40, date, expiry,
+      createdBy, createdByName, status: 'ACTIVE', results: [],
+    });
+    res.status(201).json(serializeQuiz(created));
+  } catch (error) {
+    console.error('Create quiz error:', error);
+    res.status(500).json({ message: 'Failed to create quiz', error: error.message });
+  }
+});
+
+// PUT: Trainer edits a quiz's details
+app.put('/api/quizzes/:id', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const updated = await Quiz.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Quiz not found' });
+    res.json(serializeQuiz(updated));
+  } catch (error) {
+    console.error('Update quiz error:', error);
+    res.status(500).json({ message: 'Failed to update quiz', error: error.message });
+  }
+});
+
+// DELETE: Remove a quiz
+app.delete('/api/quizzes/:id', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const deleted = await Quiz.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: 'Quiz not found' });
+    res.json({ message: 'Deleted', id: req.params.id });
+  } catch (error) {
+    console.error('Delete quiz error:', error);
+    res.status(500).json({ message: 'Failed to delete quiz', error: error.message });
+  }
+});
+
+// POST: Student submits their quiz result
+app.post('/api/quizzes/:id/result', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { rollNumber, studentName, score, totalQuestions } = req.body;
+    if (!rollNumber || !studentName || score == null || !totalQuestions) {
+      return res.status(400).json({ message: 'rollNumber, studentName, score and totalQuestions are required' });
+    }
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
+
+    const pct = (Number(score) / Number(totalQuestions)) * 100;
+    const resultData = {
+      rollNumber, studentName, score: Number(score), totalQuestions: Number(totalQuestions),
+      attempts: 1, status: pct >= 50 ? 'PASSED' : 'FAILED',
+      date: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }),
+    };
+
+    const existingIdx = quiz.results.findIndex((r) => r.rollNumber === rollNumber);
+    if (existingIdx >= 0) {
+      resultData.attempts = quiz.results[existingIdx].attempts + 1;
+      quiz.results[existingIdx].set(resultData);
+    } else {
+      quiz.results.push(resultData);
+    }
+    await quiz.save();
+    res.json(serializeQuiz(quiz));
+  } catch (error) {
+    console.error('Submit quiz result error:', error);
+    res.status(500).json({ message: 'Failed to submit quiz result', error: error.message });
+  }
+});
+
+// ================= VOUCHER (INVOICE) API ENDPOINT =================
+// Powers the student portal's "Generate Voucher" button on the Payment
+// page. Appends a new PENDING invoice to the student's `invoices` array
+// for the next unbilled month, using the same JazzCash-voucher format the
+// SuperAdmin portal already uses for registration invoices.
+
+app.post('/api/students/:id/generate-voucher', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+
+    const student = await Student.findById(req.params.id);
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    // Block generating a new voucher if one is already pending/unpaid.
+    const alreadyPending = student.invoices.find((inv) => inv.status === 'PENDING');
+    if (alreadyPending) {
+      return res.status(409).json({
+        message: 'A voucher is already pending. Please pay it before generating a new one.',
+        student: serializeStudent(student),
+      });
+    }
+
+    const now = new Date();
+    const targetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1); // next month
+    const yyyymm = `${targetDate.getFullYear()}${pad2(targetDate.getMonth() + 1)}`;
+    const monthLabel = targetDate.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+    const dueDate = `08-${targetDate.toLocaleString('en-US', { month: 'short' })}-${targetDate.getFullYear()}`;
+
+    const newInvoice = {
+      invoiceNumber: `${yyyymm}${student.rollNumber}`,
+      jazzCashId: `${yyyymm}${student.rollNumber}`,
+      type: 'Monthly',
+      month: monthLabel,
+      dueDate,
+      amount: 1000,
+      status: 'PENDING',
+    };
+
+    student.invoices.push(newInvoice);
+    student.paymentStatus = 'Pending';
+    await student.save();
+
+    res.status(201).json({ invoice: newInvoice, student: serializeStudent(student) });
+  } catch (error) {
+    console.error('Generate voucher error:', error);
+    res.status(500).json({ message: 'Failed to generate voucher', error: error.message });
+  }
+});
+
+// ================= STUDENT SELF-ENROLLMENT & LOGIN =================
+// Two ways a student ends up with a login:
+//  A) They fill the public Enroll form themselves (POST /api/enroll) —
+//     their application + password are created together.
+//  B) Admin adds them manually from the SuperAdmin portal (no password
+//     set) — the student then visits "Activate Account", proves who they
+//     are with Roll Number + CNIC, and sets their own DOB + password.
+// Either way, POST /api/student-login is what the student portal's login
+// screen calls afterwards.
+
+// POST: Public self-enrollment form (mirrors the SMIT enroll page fields).
+app.post('/api/enroll', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const {
+      studentName, fatherName, cnic, phone, fatherPhone, email, dob, address,
+      country, city, campus, course, batch, gender, laptop,
+      computerProficiency, lastQualification, hearAboutUs, photo, password,
+    } = req.body;
+
+    if (!studentName || !fatherName || !cnic || !phone || !password) {
+      return res.status(400).json({ message: 'Name, father name, CNIC, phone and password are required' });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    const existing = await Student.findOne({ cnic });
+    if (existing) {
+      return res.status(409).json({ message: 'An application with this CNIC already exists. Try logging in instead.' });
+    }
+
+    const count = await Student.countDocuments();
+    const admissionNo = `ADM${900000 + count + 1}`;
+    const rollNumber = await generateUniqueRollNumber();
+    const passwordHash = await bcrypt.hash(String(password), 10);
+
+    const created = await Student.create({
+      admissionNo, rollNumber, studentName, fatherName, cnic, phone,
+      fatherPhone: fatherPhone || '', email: email || '', dob: dob || '', address: address || '',
+      country: country || 'Pakistan', city: city || '', campus: campus || '', course: course || '',
+      batch: batch || '', gender: gender || 'Male', laptop: laptop || 'No',
+      computerProficiency: computerProficiency || '', lastQualification: lastQualification || '',
+      hearAboutUs: hearAboutUs || '', photo: photo || '',
+      status: 'pending', paymentStatus: 'Not Generated',
+      password: passwordHash, accountActivated: true,
+    });
+
+    res.status(201).json({ message: 'Application submitted', student: serializeStudent(created) });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'A student with this CNIC or roll number already exists.' });
+    }
+    console.error('Enroll error:', error);
+    res.status(500).json({ message: 'Failed to submit application', error: error.message });
+  }
+});
+
+// POST: "Create Password" — the student proves identity with the CNIC +
+// Date of Birth that admin (or their own enroll application) recorded,
+// then sets their own password. Works whether the student was added
+// manually by admin or applied themselves without a password.
+app.post('/api/students/activate', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { cnic, dob, password } = req.body;
+    if (!cnic || !dob || !password) {
+      return res.status(400).json({ message: 'CNIC, Date of Birth and password are required' });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    const student = await Student.findOne({ cnic: String(cnic).trim() });
+    if (!student) {
+      return res.status(404).json({ message: 'No student found with this CNIC. Please check with your admin.' });
+    }
+    if (!student.dob || student.dob !== dob) {
+      return res.status(401).json({ message: 'CNIC and Date of Birth do not match our records. Please check with your admin.' });
+    }
+
+    student.password = await bcrypt.hash(String(password), 10);
+    student.accountActivated = true;
+    await student.save();
+
+    res.json({ message: 'Password created. You can now log in.', student: serializeStudent(student) });
+  } catch (error) {
+    console.error('Activate account error:', error);
+    res.status(500).json({ message: 'Failed to create password', error: error.message });
+  }
+});
+
+// POST: Student login — identifier can be Roll Number or CNIC.
+app.post('/api/student-login', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { identifier, password } = req.body;
+    if (!identifier || !password) {
+      return res.status(400).json({ message: 'Roll Number/CNIC and password are required' });
+    }
+
+    const student = await Student.findOne({
+      $or: [{ rollNumber: String(identifier).trim() }, { cnic: String(identifier).trim() }],
+    });
+    if (!student) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    if (!student.accountActivated || !student.password) {
+      return res.status(409).json({ message: 'Account not activated yet. Please use "Activate Account" first.' });
+    }
+    if (BLOCKED_STUDENT_STATUSES.includes((student.status || '').toLowerCase())) {
+      return res.status(403).json({ message: `Your account status is '${student.status}'. Please contact admin.` });
+    }
+
+    const match = await bcrypt.compare(String(password), student.password);
+    if (!match) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    res.json({ message: 'Login successful', student: serializeStudent(student) });
+  } catch (error) {
+    console.error('Student login error:', error);
+    res.status(500).json({ message: 'Login failed', error: error.message });
   }
 });
 

@@ -4209,6 +4209,13 @@ export function AdminDashboard({ user, onLogout }) {
     campuses: 0,
   });
   const [statsLoading, setStatsLoading] = useState(true);
+
+  // ---- Admission open/closed toggle state (Super Admin controls this;
+  // other pages/portals read /api/admission-status to gate enrollment). ----
+  const [admissionOpen, setAdmissionOpen] = useState(true);
+  const [admissionLoading, setAdmissionLoading] = useState(true);
+  const [admissionToggling, setAdmissionToggling] = useState(false);
+
   // Sub Admin has no Dashboard page, so land on Students instead.
   const [activePage, setActivePage] = useState(isSubAdmin ? "students" : "dashboard");
 //   const [openGroups, setOpenGroups] = useState(() => ({
@@ -4252,6 +4259,58 @@ const [openGroups, setOpenGroups] = useState(() => ({
 
     loadStats();
   }, []);
+
+  // ---- Load current admission status on mount. Safe default: if the
+  // endpoint is missing/unreachable (404 or network error), treat
+  // admissions as OPEN so enrollment isn't accidentally blocked. ----
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAdmissionStatus = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/admission-status`);
+        if (response.ok) {
+          const data = await response.json();
+          if (!cancelled) setAdmissionOpen(data.open !== false);
+        } else {
+          if (!cancelled) setAdmissionOpen(true);
+        }
+      } catch (error) {
+        console.error("Failed to load admission status", error);
+        if (!cancelled) setAdmissionOpen(true);
+      } finally {
+        if (!cancelled) setAdmissionLoading(false);
+      }
+    };
+
+    loadAdmissionStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ---- Toggle admission status: PUT to MongoDB via backend API ----
+  const toggleAdmissionStatus = async () => {
+    if (admissionToggling) return;
+    setAdmissionToggling(true);
+    const next = !admissionOpen;
+    try {
+      const response = await fetch(`${API_URL}/api/admission-status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ open: next }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update admission status");
+      }
+      setAdmissionOpen(data.open);
+    } catch (error) {
+      console.error("Toggle admission status error:", error);
+    } finally {
+      setAdmissionToggling(false);
+    }
+  };
 
   const activeNavLabel = findActiveNavLabel(activePage, navItems);
 
@@ -4465,10 +4524,33 @@ const [openGroups, setOpenGroups] = useState(() => ({
                   <h1 className="ta-welcome-title">{user?.role ?? "Admin"}</h1>
                   <p className="ta-welcome-sub">{user?.email}</p>
                 </div>
-                <span className="ta-role-badge">
-                  <Icon path={ICONS.shield} size={14} />
-                  {user?.role}
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {!isSubAdmin && (
+                    <button
+                      type="button"
+                      className="ta-btn-primary"
+                      onClick={toggleAdmissionStatus}
+                      disabled={admissionLoading || admissionToggling}
+                      style={{
+                        background: admissionOpen ? "#1e9e5a" : "#d64545",
+                        borderColor: admissionOpen ? "#1e9e5a" : "#d64545",
+                      }}
+                    >
+                      <Icon path={admissionOpen ? ICONS.check : ICONS.close} size={14} />
+                      {admissionLoading
+                        ? "Loading…"
+                        : admissionToggling
+                        ? "Updating…"
+                        : admissionOpen
+                        ? "Admissions Open"
+                        : "Admissions Closed"}
+                    </button>
+                  )}
+                  <span className="ta-role-badge">
+                    <Icon path={ICONS.shield} size={14} />
+                    {user?.role}
+                  </span>
+                </div>
               </div>
 
               <div className="ta-stat-grid">

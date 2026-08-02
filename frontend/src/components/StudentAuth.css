@@ -1,0 +1,343 @@
+:root {
+  --ta-navy: #0b1f3a;
+  --ta-navy-hover: #08182c;
+  --ta-gold: #c9a24b;
+  --ta-gold-soft: rgba(201, 162, 75, 0.16);
+  --ta-text-dark: #101828;
+  --ta-text-muted: #64748b;
+  --ta-border: #e4e8f1;
+  --ta-input-bg: #f8fafd;
+  --ta-focus-ring: rgba(11, 31, 58, 0.14);
+}
+
+/* ── Full-bleed background, no stretching / no pixelation ── */
+.ta-page {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  box-sizing: border-box;
+  background-color: var(--ta-navy);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+}
+
+@media (max-width: 768px) {
+  /* background-attachment: fixed misbehaves on many mobile browsers */
+  .ta-page {
+    background-attachment: scroll;
+  }
+}
+
+.ta-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 31, 58, 0.82) 0%, rgba(11, 31, 58, 0.68) 45%, rgba(11, 31, 58, 0.85) 100%);
+}
+
+.ta-wrap {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ── Header ── */
+.ta-header {
+  text-align: center;
+  margin-bottom: 18px;
+  animation: ta-fade-down 0.6s ease both;
+}
+
+.ta-logo-frame {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  margin-bottom: 12px;
+}
+
+.ta-logo-img {
+  max-width: 96px;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  object-fit: contain;
+  display: block;
+}
+
+.ta-fullname {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ta-gold);
+  margin: 0 0 6px 0;
+}
+
+.ta-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Card ── */
+.ta-card {
+  background: #ffffff;
+  border-radius: 18px;
+  width: 100%;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  box-sizing: border-box;
+  animation: ta-fade-up 0.6s 0.1s ease both;
+}
+
+.ta-tabs {
+  display: flex;
+  background-color: #eef1f7;
+  padding: 5px;
+  margin: 18px 18px 0 18px;
+  border-radius: 10px;
+  gap: 4px;
+}
+
+.ta-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 9px 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--ta-text-muted);
+  cursor: pointer;
+  border-radius: 7px;
+  transition: all 0.2s ease;
+}
+
+.ta-tab:hover {
+  color: var(--ta-text-dark);
+}
+
+.ta-tab.active {
+  background-color: #ffffff;
+  color: var(--ta-navy);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08), 0 2px 6px rgba(16, 24, 40, 0.05);
+}
+
+.ta-form-area {
+  padding: 20px 24px 26px;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.ta-form h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--ta-text-dark);
+}
+
+.ta-instruction {
+  font-size: 0.8rem;
+  color: var(--ta-text-muted);
+  line-height: 1.55;
+  margin: 0 0 16px 0;
+}
+
+.ta-row {
+  display: flex;
+  gap: 12px;
+}
+
+.ta-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.ta-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ta-text-dark);
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+.ta-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--ta-border);
+  background-color: var(--ta-input-bg);
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--ta-text-dark);
+  box-sizing: border-box;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.ta-input:focus {
+  border-color: var(--ta-navy);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px var(--ta-focus-ring);
+}
+
+.ta-error {
+  color: #ef4444;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.ta-success {
+  color: #059669;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.ta-submit-btn {
+  width: 100%;
+  margin-top: 18px;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  background: var(--ta-navy);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(11, 31, 58, 0.3);
+  transition: all 0.2s ease;
+}
+
+.ta-submit-btn:hover:not(:disabled) {
+  background: var(--ta-navy-hover);
+  transform: translateY(-1px);
+}
+
+.ta-submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ── Photo upload ── */
+.ta-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+
+.ta-photo-circle {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px dashed var(--ta-gold);
+  background: var(--ta-gold-soft);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.ta-photo-circle:hover {
+  border-color: var(--ta-navy);
+  background: var(--ta-focus-ring);
+}
+
+.ta-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.ta-photo-placeholder {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--ta-navy);
+  text-align: center;
+  padding: 0 6px;
+  line-height: 1.2;
+}
+
+.ta-photo-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--ta-navy);
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+}
+
+.ta-photo-input-hidden {
+  display: none;
+}
+
+.ta-photo-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ta-photo-caption span {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ta-text-dark);
+}
+
+.ta-photo-caption small {
+  font-size: 0.72rem;
+  color: var(--ta-text-muted);
+}
+
+/* ── Footer ── */
+.ta-footer-note {
+  margin-top: 18px;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.02em;
+  text-align: center;
+  animation: ta-fade-up 0.6s 0.2s ease both;
+}
+
+/* ── Animations ── */
+@keyframes ta-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ta-fade-down {
+  from { opacity: 0; transform: translateY(-14px); }
+  to { opacity: 1; transform: translateY(0); }
+}

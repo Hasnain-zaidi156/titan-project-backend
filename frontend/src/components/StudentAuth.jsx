@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import "./StudentAuth.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+
+const LOGO_URL = "https://i.ibb.co/q3c3CkLS/titan-logo.jpg";
+const BG_URL = "https://i.ibb.co/3mPG35mK/titan-logo-bg.jpg";
 
 const COURSES = ["Graphic Designing", "Mobile App Development", "Web Development", "Digital Marketing", "Spoken English"];
 const CAMPUSES = ["TITAN Sukkur Campus", "TITAN Karachi Campus", "TITAN Lahore Campus"];
@@ -9,12 +13,11 @@ const CAMPUSES = ["TITAN Sukkur Campus", "TITAN Karachi Campus", "TITAN Lahore C
 // Three flows in one screen, matching how a real student ends up with a
 // working login:
 //  - "login"    : Roll Number/CNIC + password (normal day-to-day use)
-//  - "enroll"   : brand-new student fills their own application (mirrors
-//                 the SMIT public enroll form) — creates the record AND
-//                 the password together, shows up as "pending" in admin
+//  - "enroll"   : brand-new student fills their own application — creates
+//                 the record AND the password together, shows up as
+//                 "pending" in admin. Profile photo is required here.
 //  - "activate" : admin already added this student manually (no password
-//                 yet) — student proves Roll Number + CNIC, then sets DOB
-//                 + a password to unlock login
+//                 yet) — student proves CNIC + DOB, then sets a password
 export default function StudentAuth({ onLoginSuccess }) {
   const [mode, setMode] = useState("login");
   const navigate = useNavigate();
@@ -25,18 +28,33 @@ export default function StudentAuth({ onLoginSuccess }) {
   };
 
   return (
-    <div style={pageStyle}>
-      <div style={cardStyle}>
-        <h1 style={{ margin: 0, fontSize: "22px" }}>TITAN Student Portal</h1>
-        <div style={tabRowStyle}>
-          <button style={tabStyle(mode === "login")} onClick={() => setMode("login")}>Login</button>
-          <button style={tabStyle(mode === "activate")} onClick={() => setMode("activate")}>Create Password</button>
-          <button style={tabStyle(mode === "enroll")} onClick={() => setMode("enroll")}>New? Enroll</button>
+    <div className="ta-page" style={{ backgroundImage: `url(${BG_URL})` }}>
+      <div className="ta-overlay" />
+
+      <div className="ta-wrap">
+        <div className="ta-header">
+          <div className="ta-logo-frame">
+            <img src={LOGO_URL} alt="TITAN Logo" className="ta-logo-img" />
+          </div>
+          <p className="ta-fullname">Taj Institute of Technology and Applied Networks</p>
+          <h1 className="ta-title">Student Portal</h1>
         </div>
 
-        {mode === "login" && <LoginForm onLoginSuccess={handleLoginSuccess} />}
-        {mode === "activate" && <ActivateForm onDone={() => setMode("login")} />}
-        {mode === "enroll" && <EnrollForm onDone={() => setMode("login")} />}
+        <div className="ta-card">
+          <div className="ta-tabs">
+            <button type="button" className={`ta-tab ${mode === "login" ? "active" : ""}`} onClick={() => setMode("login")}>Login</button>
+            <button type="button" className={`ta-tab ${mode === "activate" ? "active" : ""}`} onClick={() => setMode("activate")}>Create Password</button>
+            <button type="button" className={`ta-tab ${mode === "enroll" ? "active" : ""}`} onClick={() => setMode("enroll")}>New? Enroll</button>
+          </div>
+
+          <div className="ta-form-area">
+            {mode === "login" && <LoginForm onLoginSuccess={handleLoginSuccess} />}
+            {mode === "activate" && <ActivateForm onDone={() => setMode("login")} />}
+            {mode === "enroll" && <EnrollForm onDone={() => setMode("login")} />}
+          </div>
+        </div>
+
+        <p className="ta-footer-note">© TITAN — Taj Institute of Technology and Applied Networks</p>
       </div>
     </div>
   );
@@ -68,13 +86,18 @@ function LoginForm({ onLoginSuccess }) {
   };
 
   return (
-    <form onSubmit={submit}>
-      <label style={labelStyle}>Roll Number or CNIC</label>
-      <input style={inputStyle} value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} required />
-      <label style={labelStyle}>Password</label>
-      <input type="password" style={inputStyle} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-      {error && <p style={errorStyle}>{error}</p>}
-      <button style={primaryBtnStyle} disabled={loading}>{loading ? "Logging in…" : "Login"}</button>
+    <form onSubmit={submit} className="ta-form">
+      <h3>Login</h3>
+      <p className="ta-instruction">Enter the Roll Number or CNIC and password used during registration.</p>
+
+      <label className="ta-label">Roll Number or CNIC</label>
+      <input className="ta-input" value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} required />
+
+      <label className="ta-label">Password</label>
+      <input type="password" className="ta-input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+
+      {error && <p className="ta-error">{error}</p>}
+      <button className="ta-submit-btn" disabled={loading}>{loading ? "Logging in…" : "Login"}</button>
     </form>
   );
 }
@@ -112,42 +135,75 @@ function ActivateForm({ onDone }) {
   };
 
   return (
-    <form onSubmit={submit}>
-      <p style={{ fontSize: "13px", color: "#64748b", marginTop: 0 }}>
+    <form onSubmit={submit} className="ta-form">
+      <h3>Create Password</h3>
+      <p className="ta-instruction">
         For students already registered by admin — enter the CNIC and Date of Birth on your record to verify it's you, then set your own password.
       </p>
-      <label style={labelStyle}>CNIC</label>
-      <input style={inputStyle} value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} placeholder="XXXXX-XXXXXXX-X" required />
-      <label style={labelStyle}>Date of Birth</label>
-      <input type="date" style={inputStyle} value={form.dob} onChange={(e) => setForm({ ...form, dob: e.target.value })} required />
-      <label style={labelStyle}>New Password</label>
-      <input type="password" style={inputStyle} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={6} />
-      <label style={labelStyle}>Confirm Password</label>
-      <input type="password" style={inputStyle} value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} required minLength={6} />
-      {error && <p style={errorStyle}>{error}</p>}
-      {success && <p style={{ ...errorStyle, color: "#059669" }}>{success}</p>}
-      <button style={primaryBtnStyle} disabled={loading}>{loading ? "Creating…" : "Create Password"}</button>
+
+      <label className="ta-label">CNIC</label>
+      <input className="ta-input" value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} placeholder="XXXXX-XXXXXXX-X" required />
+
+      <label className="ta-label">Date of Birth</label>
+      <input type="date" className="ta-input" value={form.dob} onChange={(e) => setForm({ ...form, dob: e.target.value })} required />
+
+      <label className="ta-label">New Password</label>
+      <input type="password" className="ta-input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={6} />
+
+      <label className="ta-label">Confirm Password</label>
+      <input type="password" className="ta-input" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} required minLength={6} />
+
+      {error && <p className="ta-error">{error}</p>}
+      {success && <p className="ta-success">{success}</p>}
+      <button className="ta-submit-btn" disabled={loading}>{loading ? "Creating…" : "Create Password"}</button>
     </form>
   );
 }
 
 function EnrollForm({ onDone }) {
+  const fileInputRef = useRef(null);
   const [form, setForm] = useState({
     studentName: "", fatherName: "", cnic: "", phone: "", fatherPhone: "", email: "",
     dob: "", address: "", gender: "Male", course: COURSES[0], campus: CAMPUSES[0], batch: "",
     computerProficiency: "", lastQualification: "", hearAboutUs: "", laptop: "No",
-    password: "", confirm: "",
+    password: "", confirm: "", photo: "",
   });
+  const [photoPreview, setPhotoPreview] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
+  const handlePhotoPick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose a valid image file");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setError("Photo must be under 3MB");
+      return;
+    }
+    setError("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      setPhotoPreview(dataUrl);
+      setForm((prev) => ({ ...prev, photo: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    if (!form.photo) {
+      setError("Profile photo is required");
+      return;
+    }
     if (form.password !== form.confirm) {
       setError("Passwords do not match");
       return;
@@ -171,93 +227,105 @@ function EnrollForm({ onDone }) {
   };
 
   return (
-    <form onSubmit={submit}>
-      <p style={{ fontSize: "13px", color: "#64748b", marginTop: 0 }}>
-        Fill your details to apply. Your application goes straight to the admin portal for review.
-      </p>
+    <form onSubmit={submit} className="ta-form">
+      <h3>New? Enroll</h3>
+      <p className="ta-instruction">Fill your details to apply. Your application goes straight to the admin portal for review.</p>
 
-      <div style={rowStyle}>
-        <div style={{ flex: 1 }}><label style={labelStyle}>Full Name *</label><input style={inputStyle} value={form.studentName} onChange={update("studentName")} required /></div>
-        <div style={{ flex: 1 }}><label style={labelStyle}>Father Name *</label><input style={inputStyle} value={form.fatherName} onChange={update("fatherName")} required /></div>
+      <div className="ta-photo-row">
+        <button
+          type="button"
+          className="ta-photo-circle"
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Upload profile photo"
+        >
+          {photoPreview ? (
+            <img src={photoPreview} alt="Profile preview" className="ta-photo-img" />
+          ) : (
+            <span className="ta-photo-placeholder">Add Photo</span>
+          )}
+          <span className="ta-photo-badge">📷</span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handlePhotoPick}
+          className="ta-photo-input-hidden"
+        />
+        <div className="ta-photo-caption">
+          <span>Profile Photo *</span>
+          <small>Required — tap the circle to upload</small>
+        </div>
       </div>
 
-      <div style={rowStyle}>
-        <div style={{ flex: 1 }}><label style={labelStyle}>CNIC *</label><input style={inputStyle} value={form.cnic} onChange={update("cnic")} placeholder="XXXXX-XXXXXXX-X" required /></div>
-        <div style={{ flex: 1 }}><label style={labelStyle}>Date of Birth *</label><input type="date" style={inputStyle} value={form.dob} onChange={update("dob")} required /></div>
+      <div className="ta-row">
+        <div className="ta-col"><label className="ta-label">Full Name *</label><input className="ta-input" value={form.studentName} onChange={update("studentName")} required /></div>
+        <div className="ta-col"><label className="ta-label">Father Name *</label><input className="ta-input" value={form.fatherName} onChange={update("fatherName")} required /></div>
       </div>
 
-      <div style={rowStyle}>
-        <div style={{ flex: 1 }}><label style={labelStyle}>Phone *</label><input style={inputStyle} value={form.phone} onChange={update("phone")} required /></div>
-        <div style={{ flex: 1 }}><label style={labelStyle}>Father's Phone</label><input style={inputStyle} value={form.fatherPhone} onChange={update("fatherPhone")} /></div>
+      <div className="ta-row">
+        <div className="ta-col"><label className="ta-label">CNIC *</label><input className="ta-input" value={form.cnic} onChange={update("cnic")} placeholder="XXXXX-XXXXXXX-X" required /></div>
+        <div className="ta-col"><label className="ta-label">Date of Birth *</label><input type="date" className="ta-input" value={form.dob} onChange={update("dob")} required /></div>
       </div>
 
-      <label style={labelStyle}>Email</label>
-      <input type="email" style={inputStyle} value={form.email} onChange={update("email")} />
+      <div className="ta-row">
+        <div className="ta-col"><label className="ta-label">Phone *</label><input className="ta-input" value={form.phone} onChange={update("phone")} required /></div>
+        <div className="ta-col"><label className="ta-label">Father's Phone</label><input className="ta-input" value={form.fatherPhone} onChange={update("fatherPhone")} /></div>
+      </div>
 
-      <label style={labelStyle}>Address</label>
-      <input style={inputStyle} value={form.address} onChange={update("address")} />
+      <label className="ta-label">Email</label>
+      <input type="email" className="ta-input" value={form.email} onChange={update("email")} />
 
-      <div style={rowStyle}>
-        <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Gender *</label>
-          <select style={inputStyle} value={form.gender} onChange={update("gender")}>
+      <label className="ta-label">Address</label>
+      <input className="ta-input" value={form.address} onChange={update("address")} />
+
+      <div className="ta-row">
+        <div className="ta-col">
+          <label className="ta-label">Gender *</label>
+          <select className="ta-input" value={form.gender} onChange={update("gender")}>
             <option>Male</option><option>Female</option>
           </select>
         </div>
-        <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Have a Laptop? *</label>
-          <select style={inputStyle} value={form.laptop} onChange={update("laptop")}>
+        <div className="ta-col">
+          <label className="ta-label">Have a Laptop? *</label>
+          <select className="ta-input" value={form.laptop} onChange={update("laptop")}>
             <option>No</option><option>Yes</option>
           </select>
         </div>
       </div>
 
-      <div style={rowStyle}>
-        <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Course *</label>
-          <select style={inputStyle} value={form.course} onChange={update("course")}>
+      <div className="ta-row">
+        <div className="ta-col">
+          <label className="ta-label">Course *</label>
+          <select className="ta-input" value={form.course} onChange={update("course")}>
             {COURSES.map((c) => <option key={c}>{c}</option>)}
           </select>
         </div>
-        <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Campus *</label>
-          <select style={inputStyle} value={form.campus} onChange={update("campus")}>
+        <div className="ta-col">
+          <label className="ta-label">Campus *</label>
+          <select className="ta-input" value={form.campus} onChange={update("campus")}>
             {CAMPUSES.map((c) => <option key={c}>{c}</option>)}
           </select>
         </div>
       </div>
 
-      <label style={labelStyle}>Last Qualification</label>
-      <input style={inputStyle} value={form.lastQualification} onChange={update("lastQualification")} />
+      <label className="ta-label">Last Qualification</label>
+      <input className="ta-input" value={form.lastQualification} onChange={update("lastQualification")} />
 
-      <label style={labelStyle}>Computer Proficiency</label>
-      <input style={inputStyle} value={form.computerProficiency} onChange={update("computerProficiency")} placeholder="Beginner / Intermediate / Advanced" />
+      <label className="ta-label">Computer Proficiency</label>
+      <input className="ta-input" value={form.computerProficiency} onChange={update("computerProficiency")} placeholder="Beginner / Intermediate / Advanced" />
 
-      <label style={labelStyle}>Where did you hear about us?</label>
-      <input style={inputStyle} value={form.hearAboutUs} onChange={update("hearAboutUs")} />
+      <label className="ta-label">Where did you hear about us?</label>
+      <input className="ta-input" value={form.hearAboutUs} onChange={update("hearAboutUs")} />
 
-      <div style={rowStyle}>
-        <div style={{ flex: 1 }}><label style={labelStyle}>Create Password *</label><input type="password" style={inputStyle} value={form.password} onChange={update("password")} required minLength={6} /></div>
-        <div style={{ flex: 1 }}><label style={labelStyle}>Confirm Password *</label><input type="password" style={inputStyle} value={form.confirm} onChange={update("confirm")} required minLength={6} /></div>
+      <div className="ta-row">
+        <div className="ta-col"><label className="ta-label">Create Password *</label><input type="password" className="ta-input" value={form.password} onChange={update("password")} required minLength={6} /></div>
+        <div className="ta-col"><label className="ta-label">Confirm Password *</label><input type="password" className="ta-input" value={form.confirm} onChange={update("confirm")} required minLength={6} /></div>
       </div>
 
-      {error && <p style={errorStyle}>{error}</p>}
-      {success && <p style={{ ...errorStyle, color: "#059669" }}>{success}</p>}
-      <button style={primaryBtnStyle} disabled={loading}>{loading ? "Submitting…" : "Submit Application"}</button>
+      {error && <p className="ta-error">{error}</p>}
+      {success && <p className="ta-success">{success}</p>}
+      <button className="ta-submit-btn" disabled={loading}>{loading ? "Submitting…" : "Submit Application"}</button>
     </form>
   );
 }
-
-const pageStyle = { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", padding: "20px" };
-const cardStyle = { background: "#fff", borderRadius: "16px", padding: "28px", width: "100%", maxWidth: "460px", boxShadow: "0 10px 30px rgba(0,0,0,0.08)", maxHeight: "90vh", overflowY: "auto" };
-const tabRowStyle = { display: "flex", gap: "8px", margin: "16px 0 20px" };
-const tabStyle = (active) => ({
-  flex: 1, padding: "8px 6px", borderRadius: "8px", border: active ? "none" : "1px solid #e2e8f0",
-  background: active ? "#4f46e5" : "#fff", color: active ? "#fff" : "#475569",
-  fontSize: "12.5px", fontWeight: 600, cursor: "pointer",
-});
-const labelStyle = { display: "block", fontSize: "13px", fontWeight: 600, color: "#334155", marginTop: "12px", marginBottom: "6px" };
-const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "14px", boxSizing: "border-box", fontFamily: "inherit" };
-const rowStyle = { display: "flex", gap: "12px" };
-const errorStyle = { color: "#ef4444", fontSize: "13px", marginTop: "10px" };
-const primaryBtnStyle = { width: "100%", marginTop: "18px", padding: "11px", borderRadius: "9px", border: "none", background: "#4f46e5", color: "#fff", fontSize: "14px", fontWeight: 600, cursor: "pointer" };

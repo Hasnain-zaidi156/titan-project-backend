@@ -18,6 +18,32 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+// ================= ADMISSION STATUS SCHEMA & MODEL =================
+app.get('/api/admission-status', async (req, res) => {
+  try {
+    if (!isDbConnected()) return res.json({ open: true });
+    let status = await AdmissionStatus.findOne();
+    if (!status) status = await AdmissionStatus.create({ open: true });
+    res.json({ open: status.open });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch admission status', error: error.message });
+  }
+});
+
+app.put('/api/admission-status', async (req, res) => {
+  try {
+    if (!isDbConnected()) return res.status(503).json({ message: 'Database connection unavailable' });
+    const { open } = req.body;
+    if (typeof open !== 'boolean') return res.status(400).json({ message: "'open' must be true or false" });
+    let status = await AdmissionStatus.findOne();
+    if (!status) status = await AdmissionStatus.create({ open });
+    else { status.open = open; await status.save(); }
+    res.json({ open: status.open });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update admission status', error: error.message });
+  }
+});
+
 // ================= ADMIN AUTH SCHEMA & MODEL =================
 const adminSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
@@ -42,6 +68,11 @@ const fallbackUsers = [
     name: 'Sub Admin',
   },
 ];
+
+const admissionStatusSchema = new mongoose.Schema({
+  open: { type: Boolean, default: true },
+}, { timestamps: true });
+const AdmissionStatus = mongoose.model('AdmissionStatus', admissionStatusSchema);
 
 // ================= STUDENT SCHEMA & MODEL =================
 const invoiceSchema = new mongoose.Schema({
@@ -208,6 +239,24 @@ const quizSchema = new mongoose.Schema({
 
 const Quiz = mongoose.model('Quiz', quizSchema);
 
+// ================= PROGRESS SCHEMA & MODEL =================
+// Set/updated by admin or trainer (no student self-report). Each document
+// is one student's module breakdown. If no document exists yet for a
+// rollNumber, the student portal shows 0% / empty — nothing is assumed.
+const progressModuleSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  done: { type: Number, default: 0 },
+  total: { type: Number, default: 0 },
+}, { _id: false });
+
+const progressSchema = new mongoose.Schema({
+  rollNumber: { type: String, required: true, unique: true },
+  course: { type: String, default: '' },
+  modules: [progressModuleSchema],
+}, { timestamps: true });
+
+const Progress = mongoose.model('Progress', progressSchema);
+
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
 // Maps a Mongoose student document to the plain shape the frontend expects
@@ -347,6 +396,40 @@ function serializeQuiz(doc) {
       date: r.date,
     })),
   };
+}
+
+// Maps a Progress document to the shape the Student Portal renders
+// directly (adds per-module pct/status + rolled-up totals).
+function serializeProgress(doc) {
+  const modules = (doc.modules || []).map((m) => {
+    const pct = m.total > 0 ? Math.round((m.done / m.total) * 100) : 0;
+    return {
+      name: m.name,
+      done: m.done,
+      total: m.total,
+      pct,
+      status: pct >= 100 ? 'done' : pct > 0 ? 'active' : 'pending',
+    };
+  });
+  const totalTopics = modules.reduce((sum, m) => sum + m.total, 0);
+  const doneTopics = modules.reduce((sum, m) => sum + m.done, 0);
+  const pendingTopics = Math.max(0, totalTopics - doneTopics);
+  const overallPct = totalTopics > 0 ? Math.round((doneTopics / totalTopics) * 100) : 0;
+  return {
+    rollNumber: doc.rollNumber,
+    course: doc.course || '',
+    modules,
+    totalTopics,
+    doneTopics,
+    pendingTopics,
+    overallPct,
+  };
+}
+
+// Shape returned when a student has no Progress document yet (admin/
+// trainer hasn't set anything for them) — portal should render empty.
+function emptyProgress(rollNumber) {
+  return { rollNumber, course: '', modules: [], totalTopics: 0, doneTopics: 0, pendingTopics: 0, overallPct: 0 };
 }
 
 // ---- shared date / schedule helpers (mirror the frontend's logic so
@@ -634,9 +717,41 @@ app.get('/api/attendance/summary', async (req, res) => {
     const rows = await Promise.all(
       students.map(async (s) => {
         const records = await Attendance.find({ rollNumber: s.rollNumber });
+
+        // No attendance ever marked for this student yet (i.e. admin hasn't
+        // touched their record) -> portal should look completely empty,
+        // not show them as "absent" for every past class day.
+        if (records.length === 0) {
+          return {
+            rollNumber: s.rollNumber,
+            studentName: s.studentName,
+            fatherName: s.fatherName,
+            course: s.course,
+            campus: s.campus,
+            status: s.status,
+            photo: s.photo || '',
+            totalClasses: 0,
+            present: 0,
+            leave: 0,
+            absent: 0,
+            percentage: 0,
+            presentDates: [],
+            leaveDates: [],
+          };
+        }
+
         const present = records.filter((r) => r.status === 'present').length;
         const leave = records.filter((r) => r.status === 'leave').length;
-        const totalClasses = countClassWeekdays(s.createdAt || today, today);
+
+        // Only count class-days from the FIRST time admin actually marked
+        // something for this student, not from their account creation date.
+        // This avoids inflating "absent" for days before admin engaged
+        // with this student's attendance at all.
+        const firstMarkedDate = records.reduce(
+          (earliest, r) => (new Date(r.date) < earliest ? new Date(r.date) : earliest),
+          new Date(records[0].date)
+        );
+        const totalClasses = countClassWeekdays(firstMarkedDate, today);
         const absent = Math.max(0, totalClasses - present - leave);
         const percentage = totalClasses > 0 ? ((present + leave) / totalClasses) * 100 : 0;
 
@@ -663,6 +778,44 @@ app.get('/api/attendance/summary', async (req, res) => {
   } catch (error) {
     console.error('Attendance summary error:', error);
     res.status(500).json({ message: 'Failed to load attendance summary', error: error.message });
+  }
+});
+
+// GET: Attendance stats for ONE student — powers the Student Portal itself.
+// Same rule as /api/attendance/summary: if this rollNumber has no
+// attendance records yet, everything comes back as 0 / empty (no
+// "absent since account creation" inflation).
+app.get('/api/attendance/stats/:rollNumber', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.json({ totalClasses: 0, present: 0, leave: 0, absent: 0, percentage: 0, presentDates: [], leaveDates: [] });
+    }
+
+    const records = await Attendance.find({ rollNumber: req.params.rollNumber }).sort({ date: 1 });
+
+    if (records.length === 0) {
+      return res.json({ totalClasses: 0, present: 0, leave: 0, absent: 0, percentage: 0, presentDates: [], leaveDates: [] });
+    }
+
+    const present = records.filter((r) => r.status === 'present').length;
+    const leave = records.filter((r) => r.status === 'leave').length;
+    const firstMarkedDate = new Date(records[0].date);
+    const totalClasses = countClassWeekdays(firstMarkedDate, new Date());
+    const absent = Math.max(0, totalClasses - present - leave);
+    const percentage = totalClasses > 0 ? ((present + leave) / totalClasses) * 100 : 0;
+
+    res.json({
+      totalClasses,
+      present,
+      leave,
+      absent,
+      percentage,
+      presentDates: records.filter((r) => r.status === 'present').map((r) => r.date),
+      leaveDates: records.filter((r) => r.status === 'leave').map((r) => r.date),
+    });
+  } catch (error) {
+    console.error('Attendance stats error:', error);
+    res.status(500).json({ message: 'Failed to load attendance stats', error: error.message });
   }
 });
 
@@ -1250,6 +1403,54 @@ app.post('/api/quizzes/:id/result', async (req, res) => {
   } catch (error) {
     console.error('Submit quiz result error:', error);
     res.status(500).json({ message: 'Failed to submit quiz result', error: error.message });
+  }
+});
+
+// ================= PROGRESS API ENDPOINTS =================
+// Teacher/SuperAdmin portal sets each student's module breakdown here.
+// Student Portal reads it live. No document for a rollNumber yet -> the
+// portal shows 0% / empty, not fake numbers.
+
+// GET: one student's progress.
+app.get('/api/progress/:rollNumber', async (req, res) => {
+  try {
+    if (!isDbConnected()) return res.json(emptyProgress(req.params.rollNumber));
+    const doc = await Progress.findOne({ rollNumber: req.params.rollNumber });
+    if (!doc) return res.json(emptyProgress(req.params.rollNumber));
+    res.json(serializeProgress(doc));
+  } catch (error) {
+    console.error('Fetch progress error:', error);
+    res.status(500).json({ message: 'Failed to fetch progress', error: error.message });
+  }
+});
+
+// PUT: admin/trainer sets or updates a student's module breakdown (upsert).
+app.put('/api/progress/:rollNumber', async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Database connection unavailable' });
+    }
+    const { course, modules } = req.body;
+    if (!Array.isArray(modules)) {
+      return res.status(400).json({ message: 'modules must be an array' });
+    }
+    const cleanModules = modules
+      .map((m) => ({
+        name: String(m.name || '').trim(),
+        done: Math.max(0, Number(m.done) || 0),
+        total: Math.max(0, Number(m.total) || 0),
+      }))
+      .filter((m) => m.name);
+
+    const doc = await Progress.findOneAndUpdate(
+      { rollNumber: req.params.rollNumber },
+      { $set: { course: course || '', modules: cleanModules } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    res.json(serializeProgress(doc));
+  } catch (error) {
+    console.error('Update progress error:', error);
+    res.status(500).json({ message: 'Failed to update progress', error: error.message });
   }
 });
 

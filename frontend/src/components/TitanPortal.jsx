@@ -2,15 +2,18 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './TitanPortal.css';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+
 export default function TitanPortal({ onLoginSuccess }) {
   const navigate = useNavigate();
   const [view, setView] = useState('student-login');
-  
+
   const [cnic, setCnic] = useState('');
   const [email, setEmail] = useState('');
   const [dob, setDob] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleViewChange = (newView) => {
     setView(newView);
@@ -21,24 +24,68 @@ export default function TitanPortal({ onLoginSuccess }) {
     setShowPassword(false);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
 
     if (view === 'teacher-login') {
+      // Trainer login abhi bhi fixed credentials se hai — backend mein
+      // trainer ke liye alag password field/endpoint nahi hai.
       if (email === 'drhasnain953@gmail.com' && password === '2008hasanin') {
         onLoginSuccess('trainer', { name: "Dr. Hasnain", email: email });
       } else {
         alert("Invalid Trainer Email or Password!");
       }
-    } else if (view === 'student-login') {
-      if (cnic.trim() === '4550290108391' && password === 'Hasnain') {
-        onLoginSuccess('student', { name: "Hasnain", cnic: cnic });
-      } else {
-        alert("Invalid CNIC or Password!");
+      return;
+    }
+
+    if (view === 'student-login') {
+      // Ab yeh real backend (/api/student-login) se check hota hai —
+      // roll number ya CNIC + password, jo bhi student ne activate kiya ho.
+      setSubmitting(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/student-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: cnic.trim(), password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.message || 'Invalid CNIC or Password!');
+          return;
+        }
+        onLoginSuccess('student', data.student);
+      } catch (err) {
+        alert('Could not reach the server. Please try again.');
+      } finally {
+        setSubmitting(false);
       }
-    } else if (view === 'student-register') {
-      alert("Password created successfully! Kindly switch to Login tab.");
-      handleViewChange('student-login');
+      return;
+    }
+
+    if (view === 'student-register') {
+      // "Create Password" — CNIC + DOB se pehchaan karke naya password set
+      // karta hai (/api/students/activate). Kaam karta hai chahe student
+      // admin ne manually add kiya ho ya khud enroll form se apply kiya ho.
+      setSubmitting(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/students/activate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cnic: cnic.trim(), dob, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.message || 'Could not create password. Please check your details.');
+          return;
+        }
+        alert("Password created successfully! Kindly switch to Login tab.");
+        handleViewChange('student-login');
+      } catch (err) {
+        alert('Could not reach the server. Please try again.');
+      } finally {
+        setSubmitting(false);
+      }
     }
   };
 
@@ -47,10 +94,10 @@ export default function TitanPortal({ onLoginSuccess }) {
       {/* Branding Header */}
       <div className="titan-header">
         <div className="titan-logo-container">
-          <img 
-            src="https://i.ibb.co/q3c3CkLS/titan-logo.jpg" 
-            alt="TITAN Logo" 
-            className="titan-logo-img" 
+          <img
+            src="https://i.ibb.co/q3c3CkLS/titan-logo.jpg"
+            alt="TITAN Logo"
+            className="titan-logo-img"
           />
         </div>
         <p className="titan-fullname">Taj Institute of Technology and Applied Networks</p>
@@ -61,18 +108,18 @@ export default function TitanPortal({ onLoginSuccess }) {
 
       {/* Main Card */}
       <div className="titan-card">
-        
+
         {/* Student Navigation Tabs */}
         {view !== 'teacher-login' && (
           <div className="titan-tabs">
-            <button 
+            <button
               type="button"
               className={`tab-btn ${view === 'student-login' ? 'active' : ''}`}
               onClick={() => handleViewChange('student-login')}
             >
               Login
             </button>
-            <button 
+            <button
               type="button"
               className={`tab-btn ${view === 'student-register' ? 'active' : ''}`}
               onClick={() => handleViewChange('student-register')}
@@ -84,23 +131,23 @@ export default function TitanPortal({ onLoginSuccess }) {
 
         {/* Dynamic Form Content */}
         <form onSubmit={handleSubmit} className="titan-form">
-          
+
           {view === 'student-login' && (
             <>
               <h3>Login</h3>
               <p className="form-instruction">
-                Kindly provide the CNIC number and password used during TITAN course registration.
+                Kindly provide the CNIC number (or Roll Number) and password used during TITAN course registration.
               </p>
-              
+
               <div className="input-group">
-                <label>CNIC *</label>
-                <input 
-                  type="text" 
+                <label>CNIC / Roll Number *</label>
+                <input
+                  type="text"
                   inputMode="numeric"
-                  placeholder="Enter CNIC number"
-                  value={cnic} 
-                  onChange={(e) => setCnic(e.target.value.replace(/[^0-9]/g, ''))} 
-                  required 
+                  placeholder="Enter CNIC or Roll Number"
+                  value={cnic}
+                  onChange={(e) => setCnic(e.target.value.replace(/[^0-9]/g, ''))}
+                  required
                 />
               </div>
             </>
@@ -112,26 +159,26 @@ export default function TitanPortal({ onLoginSuccess }) {
               <p className="form-instruction">
                 Kindly provide the CNIC number and DOB used during TITAN course registration.
               </p>
-              
+
               <div className="input-group">
                 <label>CNIC *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   inputMode="numeric"
                   placeholder="Enter CNIC number"
-                  value={cnic} 
-                  onChange={(e) => setCnic(e.target.value.replace(/[^0-9]/g, ''))} 
-                  required 
+                  value={cnic}
+                  onChange={(e) => setCnic(e.target.value.replace(/[^0-9]/g, ''))}
+                  required
                 />
               </div>
 
               <div className="input-group">
                 <label>DOB *</label>
-                <input 
-                  type="date" 
-                  value={dob} 
-                  onChange={(e) => setDob(e.target.value)} 
-                  required 
+                <input
+                  type="date"
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  required
                 />
               </div>
             </>
@@ -143,15 +190,15 @@ export default function TitanPortal({ onLoginSuccess }) {
               <p className="form-instruction">
                 Kindly provide your email and password to access the trainer portal.
               </p>
-              
+
               <div className="input-group">
                 <label>Email *</label>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   placeholder="trainer@example.com"
-                  value={email} 
-                  onChange={(e) => setEmail(e.target.value)} 
-                  required 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
                 />
               </div>
             </>
@@ -161,15 +208,15 @@ export default function TitanPortal({ onLoginSuccess }) {
           <div className="input-group password-group">
             <label>Password *</label>
             <div className="password-wrapper">
-              <input 
-                type={showPassword ? "text" : "password"} 
+              <input
+                type={showPassword ? "text" : "password"}
                 placeholder="Enter password"
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                required 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="toggle-password-text"
                 onClick={() => setShowPassword(!showPassword)}
               >
@@ -179,8 +226,8 @@ export default function TitanPortal({ onLoginSuccess }) {
           </div>
 
           {/* Action Buttons */}
-          <button type="submit" className="submit-btn">
-            {view === 'student-register' ? 'SUBMIT' : 'LOGIN'}
+          <button type="submit" className="submit-btn" disabled={submitting}>
+            {submitting ? 'Please wait...' : (view === 'student-register' ? 'SUBMIT' : 'LOGIN')}
           </button>
 
           {view === 'teacher-login' && (
@@ -192,7 +239,7 @@ export default function TitanPortal({ onLoginSuccess }) {
       {/* Switching Button Area */}
       <div className="portal-switcher-box">
         {view === 'teacher-login' ? (
-          <button 
+          <button
             type="button"
             className="switch-portal-btn"
             onClick={() => handleViewChange('student-login')}
@@ -200,7 +247,7 @@ export default function TitanPortal({ onLoginSuccess }) {
             Login as student
           </button>
         ) : (
-          <button 
+          <button
             type="button"
             className="switch-portal-btn"
             onClick={() => handleViewChange('teacher-login')}
@@ -209,29 +256,6 @@ export default function TitanPortal({ onLoginSuccess }) {
           </button>
         )}
       </div>
-
-      {/* ══════ Admin Portal Link ══════ */}
-      {/* <div style={{ textAlign: 'center', marginTop: '16px' }}>
-        <button
-          type="button"
-          onClick={() => navigate('')}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#555',
-            fontSize: '12px',
-            cursor: 'pointer',
-            padding: '4px 8px',
-            borderRadius: '4px',
-            transition: 'color 0.2s',
-            fontFamily: 'inherit',
-          }}
-          onMouseEnter={(e) => (e.target.style.color = '#1a3c6e')}
-          onMouseLeave={(e) => (e.target.style.color = '#555')}
-        >
-          
-        </button>
-      </div>*/}
     </div>
   );
 }

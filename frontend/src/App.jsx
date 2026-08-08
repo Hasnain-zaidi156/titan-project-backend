@@ -3,9 +3,26 @@ import { useState, useEffect } from "react";
 
 import TitanPortal from "./components/TitanPortal";
 import Dashboard from "./components/Dashboard";
-import StudentDashboard from "./components/StudentDashboard";
+import StudentDashboard from "./components/student/StudentDashboard";
 import StudentAuth from "./components/StudentAuth";
-import { AdminLogin, AdminDashboard } from "./components/SuperAdmin";
+
+// ---- Admin Portal — ab split hai, sub-routes ke sath (Students, Attendance,
+// Trainers, Slots, Updation, Profile). Sab files src/components/ mein hain. ----
+import { AdminLogin } from "./components/admin/AdminLogin";
+import { AdminDashboard } from "./components/admin/AdminDashboard";
+import { RequireAuth } from "./components/admin/RequireAuth";
+import { DashboardPage } from "./components/admin/DashboardPage";
+import { StudentsPage } from "./components/admin/StudentsPage";
+import { MarkAttendancePage } from "./components/admin/MarkAttendancePage";
+import { ViewAttendancePage } from "./components/admin/ViewAttendancePage";
+import { MultiAttendancePage } from "./components/admin/MultiAttendancePage";
+import { TrainersListPage } from "./components/admin/TrainersListPage";
+import { MarkTrainerAttendancePage } from "./components/admin/MarkTrainerAttendancePage";
+import { ViewTrainerAttendancePage } from "./components/admin/ViewTrainerAttendancePage";
+import { TrainerAttendanceRequestPage } from "./components/admin/TrainerAttendanceRequestPage";
+import { SlotsPage } from "./components/admin/SlotsPage";
+import { UpdationPage } from "./components/admin/UpdationPage";
+import { ProfilePage } from "./components/admin/ProfilePage";
 
 // Session is kept in localStorage so a page refresh doesn't kick the
 // person back to the login screen — it stays on whichever portal
@@ -126,6 +143,8 @@ function App() {
         />
 
         {/* ---- Admin Portal ---- */}
+
+        {/* /admin = login screen. Login ho chuka ho to seedha dashboard par */}
         <Route
           path="/admin"
           element={
@@ -137,16 +156,33 @@ function App() {
           }
         />
 
+        {/* /admin/dashboard = sidebar+topbar layout (AdminDashboard), andar
+           Outlet se har module (Students/Attendance/Trainers/Slots/...)
+           apne route par render hota hai. RequireAuth login + Sub Admin
+           role-restriction dono sambhalta hai. */}
         <Route
           path="/admin/dashboard"
           element={
-            admin.isLoggedIn ? (
+            <RequireAuth user={admin.isLoggedIn ? admin.data : null}>
               <AdminDashboard user={admin.data} onLogout={handleAdminLogout} />
-            ) : (
-              <Navigate to="/admin" replace />
-            )
+            </RequireAuth>
           }
-        />
+        >
+          <Route index element={<DashboardPage user={admin.data} />} />
+          <Route path="students" element={<StudentsPage />} />
+          <Route path="attendance/mark" element={<MarkAttendancePage />} />
+          <Route path="attendance/view" element={<ViewAttendancePage />} />
+          <Route path="attendance/multi" element={<MultiAttendancePage />} />
+          <Route path="trainers" element={<TrainersListPage />} />
+          <Route path="trainers/attendance/mark" element={<MarkTrainerAttendancePage />} />
+          <Route path="trainers/attendance/view" element={<ViewTrainerAttendancePage />} />
+          <Route path="trainers/attendance/request" element={<TrainerAttendanceRequestPage />} />
+          <Route path="administration" element={<SlotsPage />} />
+          <Route path="updation" element={<UpdationPage />} />
+          <Route path="profile" element={<ProfilePage user={admin.data} onLogout={handleAdminLogout} />} />
+          {/* Koi unknown sub-route AdminDashboard ke andar aaye to students par bhej do */}
+          <Route path="*" element={<Navigate to="/admin/dashboard/students" replace />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

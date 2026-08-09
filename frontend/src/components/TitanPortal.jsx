@@ -271,6 +271,13 @@ export default function TitanPortal({ onLoginSuccess }) {
             Login as teacher
           </button>
         )}
+        <button
+          type="button"
+          className="switch-portal-btn"
+          onClick={() => navigate('/admin')}
+        >
+          Login as admin
+        </button>
       </div>
     </div>
   );

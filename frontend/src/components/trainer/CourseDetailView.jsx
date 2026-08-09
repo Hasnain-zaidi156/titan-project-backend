@@ -18,7 +18,7 @@ const CourseDetailView = ({
   courseAttendanceDate, setCourseAttendanceDate,
 
   // assignments tab
-  displayedAssignments, assignmentsLoading, openNewAssignmentModal,
+  displayedAssignments, assignmentsLoading, openNewAssignmentModal, openEditAssignmentModal,
   selectedAssignment, selectedSubmission, setSelectedSubmission,
   selectedSubmissionIdx, setSelectedSubmissionIdx,
   getSubApproval, setSubmissionApproval, submitFeedback, submissionFeedback,
@@ -66,10 +66,7 @@ const CourseDetailView = ({
         )}
 
         {activeCourseTab === 'attendance' && (
-          <CourseAttendanceTab
-            courseAttendanceDate={courseAttendanceDate}
-            setCourseAttendanceDate={setCourseAttendanceDate}
-          />
+          <CourseAttendanceTab course={selectedCourse} />
         )}
 
         {activeCourseTab === 'assignments' && (
@@ -77,6 +74,7 @@ const CourseDetailView = ({
             displayedAssignments={displayedAssignments}
             assignmentsLoading={assignmentsLoading}
             openNewAssignmentModal={openNewAssignmentModal}
+            openEditAssignmentModal={openEditAssignmentModal}
             selectedAssignment={selectedAssignment}
             setSelectedAssignment={setSelectedAssignment}
             selectedSubmission={selectedSubmission}

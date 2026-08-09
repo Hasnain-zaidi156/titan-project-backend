@@ -114,6 +114,7 @@ export const EMPTY_FORM = {
   phone: "", country: "Pakistan", city: CITIES[0], campus: CAMPUSES[0],
   course: COURSES[0], batch: BATCHES[0], slot: SLOTS[0], status: "pending",
   paymentStatus: "Not Generated", gender: GENDERS[0], laptop: "No",
+  timing: "", // "Sat 09:00 AM - 11:00 AM | Sun 09:00 AM - 11:00 AM" — DayTimePicker se aata hai, trainer matching ke liye
 };
 
 // Pakistani CNIC: 12345-1234567-1 (dashes optional while typing)

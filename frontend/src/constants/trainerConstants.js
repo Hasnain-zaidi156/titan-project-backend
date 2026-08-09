@@ -69,7 +69,7 @@ export const SEED_TRAINER_ATTENDANCE = [
 export const SEED_TRAINER_ATTENDANCE_REQUESTS = [];
 
 export const EMPTY_TRAINER_FORM = {
-  name: "", email: "", employeeId: "", photo: "",
+  name: "", email: "", employeeId: "", photo: "", password: "",
   courses: COURSES[0], cities: CITIES[0], campus: CAMPUSES[0],
   slotSchedule: "", status: "Active",
 };

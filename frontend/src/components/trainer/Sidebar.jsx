@@ -5,7 +5,7 @@ const Sidebar = ({
   isSidebarOpen, toggleSidebar, currentMenu, goTo,
   profileMenuOpen, setProfileMenuOpen, handleLogoutAction,
   profilePhoto, trainerProfile,
-  theme = 'light', toggleTheme,
+  theme = "light", toggleTheme,
 }) => {
   return (
     <aside className={`sidebar ${isSidebarOpen ? 'expanded' : 'collapsed'}`}>
@@ -18,12 +18,12 @@ const Sidebar = ({
         <div className="titan-brand-wrapper">
           <span
             style={
-              theme === 'dark'
-                ? { display: 'inline-flex', background: '#fff', borderRadius: '10px', padding: '4px', boxShadow: '0 2px 10px rgba(0,0,0,0.35)' }
+              theme === "dark"
+                ? { display: "inline-flex", background: "#fff", borderRadius: "10px", padding: "4px", boxShadow: "0 2px 10px rgba(0,0,0,0.35)" }
                 : undefined
             }
           >
-            <img src={TITAN_LOGO} alt="TITAN" className="titan-logo-img" style={{ display: 'block' }} />
+            <img src={TITAN_LOGO} alt="TITAN" className="titan-logo-img" style={{ display: "block" }} />
           </span>
           {isSidebarOpen && <h3 className="logo-text-bottom">TITAN</h3>}
         </div>
@@ -45,19 +45,19 @@ const Sidebar = ({
       <div className="sidebar-footer">
         {profileMenuOpen && (
           <div className="profile-popup-menu">
-            <div className="profile-popup-item" onClick={() => goTo('profile')}>
+            <div className="profile-popup-item" onClick={() => { setProfileMenuOpen(false); goTo('profile'); }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
               <span>Profile</span>
             </div>
             {toggleTheme && (
               <div className="profile-popup-item theme-popup-item" onClick={toggleTheme}>
-                {theme === 'dark' ? (
+                {theme === "dark" ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
                 ) : (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
                 )}
-                <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-                <span className={`mini-theme-switch ${theme === 'dark' ? 'on' : ''}`}><span className="mini-theme-knob" /></span>
+                <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+                <span className={`mini-theme-switch ${theme === "dark" ? "on" : ""}`}><span className="mini-theme-knob" /></span>
               </div>
             )}
             <div className="profile-popup-item logout-popup-item" onClick={handleLogoutAction}>

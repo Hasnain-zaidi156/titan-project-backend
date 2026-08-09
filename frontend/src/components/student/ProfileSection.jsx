@@ -16,6 +16,8 @@ export default function ProfileSection({
   saveProfile,
   cancelEditProfile,
   studentCourse,
+  savingProfile,
+  profileSaveError,
 }) {
   return (
     <div className="s-section animated-fade">
@@ -47,14 +49,19 @@ export default function ProfileSection({
           <div className="s-profile-actions">
             {isEditingProfile ? (
               <>
-                <button className="s-btn-outline" onClick={cancelEditProfile}>Cancel</button>
-                <button className="s-btn-primary" onClick={saveProfile}>Save Changes</button>
+                <button className="s-btn-outline" onClick={cancelEditProfile} disabled={savingProfile}>Cancel</button>
+                <button className="s-btn-primary" onClick={saveProfile} disabled={savingProfile}>
+                  {savingProfile ? "Saving..." : "Save Changes"}
+                </button>
               </>
             ) : (
               <button className="s-btn-outline" onClick={startEditProfile}>Edit Profile</button>
             )}
           </div>
         </div>
+        {profileSaveError && (
+          <p style={{ color: "var(--red-color, #ef4444)", fontSize: "0.85rem", padding: "0 20px 10px" }}>{profileSaveError}</p>
+        )}
 
         <div className="s-profile-grid">
           <div className="s-profile-section">

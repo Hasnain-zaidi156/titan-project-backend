@@ -29,12 +29,28 @@ export default function TitanPortal({ onLoginSuccess }) {
     if (submitting) return;
 
     if (view === 'teacher-login') {
-      // Trainer login abhi bhi fixed credentials se hai — backend mein
-      // trainer ke liye alag password field/endpoint nahi hai.
-      if (email === 'drhasnain953@gmail.com' && password === '2008hasanin') {
-        onLoginSuccess('trainer', { name: "Dr. Hasnain", email: email });
-      } else {
-        alert("Invalid Trainer Email or Password!");
+      // Real trainer login — admin ne jo bhi trainer DB mein save kiya hai,
+      // wahi email+password se /api/trainer-login se login hoga. Koi
+      // hardcoded email/password ab nahi hai.
+      setSubmitting(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/trainer-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim(), password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.message || 'Invalid Trainer Email or Password!');
+          return;
+        }
+        // data.trainer = real admin-saved record: name, email, employeeId,
+        // photo, courses[], cities[], campus, slotSchedule, status
+        onLoginSuccess('trainer', data.trainer);
+      } catch (err) {
+        alert('Could not reach the server. Please try again.');
+      } finally {
+        setSubmitting(false);
       }
       return;
     }

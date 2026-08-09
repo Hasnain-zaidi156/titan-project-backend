@@ -19,11 +19,6 @@ import ProfileSection from "./ProfileSection"
 const TITAN_LOGO = "https://i.ibb.co/q3c3CkLS/titan-logo.jpg"
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"
 
-// studentId = Mongo _id of the logged-in student (from DB record).
-// Ab koi hardcoded demo student nahi — jo bhi naya student CNIC/DOB se
-// login karay, sirf usi ka real data (props se) dikhta hai. Jo field
-// admin ne DB mein set nahi ki (naya student), wahan "Not provided" /
-// khali state show hoti hai, purana demo data nahi.
 export default function StudentDashboard({
   studentName = "Student",
   studentId = null,
@@ -34,6 +29,8 @@ export default function StudentDashboard({
   dob = "",
   email = "",
   phone = "",
+  photo = "",
+  timing = "", // admin-set "Sat 09:00 AM - 11:00 AM | Sun 09:00 AM - 11:00 AM" style string
   onLogout,
 }) {
   // ===== Theme (dark / light mode) =====
@@ -49,20 +46,16 @@ export default function StudentDashboard({
 
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"))
 
-  // ===== Payment method (chosen before voucher generation) =====
   const [paymentMethod, setPaymentMethod] = useState("JazzCash")
 
-  // ===== Live voucher / invoices (backend-synced) =====
-  const [liveInvoices, setLiveInvoices] = useState(null) // null = not fetched yet
+  const [liveInvoices, setLiveInvoices] = useState(null)
   const [generatingVoucher, setGeneratingVoucher] = useState(false)
   const [voucherError, setVoucherError] = useState("")
 
-  // ===== Live assignments / quizzes created by trainers (backend-synced) =====
   const [liveAssignments, setLiveAssignments] = useState([])
   const [liveQuizzes, setLiveQuizzes] = useState([])
 
-  // ===== Assignment Detail modal (view + submit) =====
-  const [assignmentModal, setAssignmentModal] = useState(null) // the assignment object, or null when closed
+  const [assignmentModal, setAssignmentModal] = useState(null)
   const [submitForm, setSubmitForm] = useState({ link: "", description: "" })
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
@@ -118,6 +111,48 @@ export default function StudentDashboard({
     }
   }
 
+  const fetchLatestProfile = async () => {
+    if (!studentId) return
+    try {
+      const res = await fetch(`${API_BASE}/api/students`, { cache: "no-store" })
+      const data = await res.json()
+      const me = Array.isArray(data) ? data.find((s) => s.id === studentId) : null
+      if (!me) return
+      if (me.photo) {
+        setProfilePhoto(me.photo)
+        setProfilePhotoDraft(me.photo)
+      }
+      setProfileData((prev) => ({
+        ...prev,
+        name: me.studentName || prev.name,
+        email: me.email || prev.email,
+        phone: me.phone || prev.phone,
+        address: me.address || prev.address,
+        gender: me.gender || prev.gender,
+        dob: me.dob || prev.dob,
+        qualification: me.lastQualification || prev.qualification,
+        cnic: me.cnic || prev.cnic,
+      }))
+      if (typeof me.timing === "string") {
+        setLiveTiming(me.timing)
+      }
+    } catch (err) {
+      console.error("Failed to refresh profile:", err)
+    }
+  }
+
+  useEffect(() => {
+    fetchLatestProfile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId])
+
+  useEffect(() => {
+    const onFocus = () => fetchLatestProfile()
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId])
+
   useEffect(() => {
     fetchLiveAssignments()
     fetchLiveQuizzes()
@@ -153,16 +188,19 @@ export default function StudentDashboard({
   const [studentProfileMenuOpen, setStudentProfileMenuOpen] = useState(false)
   const [studentWidgetTab, setStudentWidgetTab] = useState("quizzes")
 
-  // Feedback modal
+  useEffect(() => {
+    if (studentActiveMenu === "profile" || studentActiveMenu === "dashboard") {
+      fetchLatestProfile()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentActiveMenu])
+
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [feedbackType, setFeedbackType] = useState("")
   const [feedbackText, setFeedbackText] = useState("")
   const [feedbackImages, setFeedbackImages] = useState([])
   const feedbackFileRef = useRef(null)
 
-  // Profile — sirf real login props se banta hai. Jo field admin ne DB
-  // mein set nahi ki (naya student), wahan "Not provided" dikhega, koi
-  // purani demo detail nahi.
   const DEFAULT_AVATAR = `https://ui-avatars.com/api/?name=${encodeURIComponent(
     studentName || "Student",
   )}&background=1a3c6e&color=fff&size=200`
@@ -179,30 +217,35 @@ export default function StudentDashboard({
     cnic: cnic || "Not provided",
   })
   const [profileDraft, setProfileDraft] = useState(profileData)
-  const [profilePhoto, setProfilePhoto] = useState(DEFAULT_AVATAR)
-  const [profilePhotoDraft, setProfilePhotoDraft] = useState(DEFAULT_AVATAR)
+  const [profilePhoto, setProfilePhoto] = useState(photo || DEFAULT_AVATAR)
+  const [profilePhotoDraft, setProfilePhotoDraft] = useState(photo || DEFAULT_AVATAR)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileSaveError, setProfileSaveError] = useState("")
   const profileFileRef = useRef(null)
 
-  // ========== CURRENT MONTH (dynamic, hardcoded "June 2026" nahi) ==========
+  // Admin ka set kiya hua Days+Time — mount par prop se aata hai, phir
+  // fetchLatestProfile refresh par bhi update hota rehta hai.
+  const [liveTiming, setLiveTiming] = useState(timing || "")
+
   const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
   const now = new Date()
-  // Pichle 6 mahine ki list, sabse naya month pehle — koi attendance record
-  // abhi tak nahi hoga is liye sirf dropdown ke liye labels hain.
   const attMonths = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`
   })
 
-  // Attendance
   const [attSelectedMonth, setAttSelectedMonth] = useState(attMonths[0])
 
-  // Assignment pagination
   const [assignPage, setAssignPage] = useState(1)
   const ASSIGN_PER_PAGE = 10
 
-  // Naya student — abhi tak koi enrollment/progress/attendance nahi, is
-  // liye course card khali/zero state mein dikhta hai jab tak admin
-  // panel se course, roll number, attendance wagera set nahi hoti.
+  // Admin ka "Sat 09:00 AM - 11:00 AM | Sun 09:00 AM - 11:00 AM" string ko
+  // schedule pills list mein todta hai — timing set na ho to khali rehta hai.
+  const parsedSchedule = liveTiming
+    ? liveTiming.split("|").map((p) => p.trim()).filter(Boolean)
+    : []
+  const activeDayNames = new Set(parsedSchedule.map((s) => s.split(" ")[0]))
+
   const studentCourse = {
     title: course || "No Course Assigned Yet",
     status: course ? "ENROLLED" : "PENDING",
@@ -211,27 +254,24 @@ export default function StudentDashboard({
     roll: rollNumber || "—",
     campus: campus || "—",
     city: "—",
-    schedule: [],
+    schedule: parsedSchedule,
     attendance: "0/0",
     assignments: "0/0",
   }
 
-  // Current week ke din — bina kisi fake "present" highlighting ke,
-  // kyunke naye student ki abhi koi class attend nahi hui.
+  // Current week ke din — admin ne jo days select ki hain wahi highlight hoti hain.
   const startOfWeek = new Date(now)
   startOfWeek.setDate(now.getDate() - now.getDay())
   const studentWeekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => {
     const day = new Date(startOfWeek)
     day.setDate(startOfWeek.getDate() + i)
-    return { d, n: day.getDate(), active: false }
+    return { d, n: day.getDate(), active: activeDayNames.has(d) }
   })
 
-  // ========== ATTENDANCE DATA (khali — koi backend record abhi nahi) ==========
   const attStats = { total: 0, present: 0, leave: 0, absent: 0 }
   const attPercent = attStats.total > 0 ? Math.round((attStats.present / attStats.total) * 100) : 0
   const attendanceLog = {}
 
-  // ========== PROGRESS DATA (khali — naya student, koi module start nahi hua) ==========
   const progressData = {
     totalTopics: 0,
     doneTopics: 0,
@@ -240,10 +280,7 @@ export default function StudentDashboard({
     modules: [],
   }
 
-  // ========== PAYMENT DATA (khali — koi voucher generate nahi hua abhi) ==========
   const feeRecords = []
-
-  // ========== ASSIGNMENT DATA (khali demo list — sirf liveAssignments backend se aayenge) ==========
   const assignmentsData = []
 
   const assignStats = {
@@ -256,10 +293,8 @@ export default function StudentDashboard({
   const totalAssignPages = Math.max(1, Math.ceil(assignmentsData.length / ASSIGN_PER_PAGE))
   const paginatedAssignments = assignmentsData.slice((assignPage - 1) * ASSIGN_PER_PAGE, assignPage * ASSIGN_PER_PAGE)
 
-  // ========== QUIZ DATA (khali demo list — sirf liveQuizzes backend se aayenge) ==========
   const quizzesData = []
 
-  // ========== HANDLERS ==========
   const handleLogoutClick = () => {
     setStudentView("home")
     setStudentActiveMenu("dashboard")
@@ -308,10 +343,38 @@ export default function StudentDashboard({
     setIsEditingProfile(true)
   }
 
-  const saveProfile = () => {
-    setProfileData(profileDraft)
-    setProfilePhoto(profilePhotoDraft)
-    setIsEditingProfile(false)
+  const saveProfile = async () => {
+    if (!studentId) {
+      setProfileSaveError("Your account isn't linked to a database record. Please contact admin.")
+      return
+    }
+    setSavingProfile(true)
+    setProfileSaveError("")
+    try {
+      const res = await fetch(`${API_BASE}/api/students/${studentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photo: profilePhotoDraft,
+          email: profileDraft.email,
+          phone: profileDraft.phone,
+          address: profileDraft.address,
+          gender: profileDraft.gender,
+          dob: profileDraft.dob,
+          lastQualification: profileDraft.qualification,
+          cnic: profileDraft.cnic,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || "Failed to save profile")
+      setProfileData(profileDraft)
+      setProfilePhoto(profilePhotoDraft)
+      setIsEditingProfile(false)
+    } catch (err) {
+      setProfileSaveError(err.message || "Something went wrong. Please try again.")
+    } finally {
+      setSavingProfile(false)
+    }
   }
 
   const cancelEditProfile = () => {
@@ -328,7 +391,6 @@ export default function StudentDashboard({
     reader.readAsDataURL(file)
   }
 
-  // ========== MAIN RENDER ==========
   return (
     <div className="portal-container">
       <FeedbackModal
@@ -491,6 +553,8 @@ export default function StudentDashboard({
                 saveProfile={saveProfile}
                 cancelEditProfile={cancelEditProfile}
                 studentCourse={studentCourse}
+                savingProfile={savingProfile}
+                profileSaveError={profileSaveError}
               />
             )}
           </main>

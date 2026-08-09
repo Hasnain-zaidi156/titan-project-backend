@@ -11,7 +11,7 @@ export default function HomeView({ studentCourse, openFeedbackModal, setStudentV
           <span
             style={
               theme === "dark"
-                ? { display: "inline-flex", background: "#fff", borderRadius: "10px", padding: "4px", boxShadow: "0 2px 10px rgba(0,0,0,0.35)" }
+                ? { display: "inline-flex", background: "#fffefe", borderRadius: "10px", padding: "4px", boxShadow: "0 2px 10px rgba(0,0,0,0.35)" }
                 : undefined
             }
           >

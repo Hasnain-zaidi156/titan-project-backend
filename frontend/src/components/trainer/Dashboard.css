@@ -521,3 +521,483 @@ body {
   .cal-event-pill { font-size: 8px; padding: 2px 3px; }
   .pagination-page-num, .pagination-nav-btn { padding: 5px 8px; font-size: 12px; }
 }
+
+/* ================================================================
+   DARK MODE — trainer portal
+   Works because ThemeToggle.css sets [data-theme="dark"] on <html>
+   which these selectors pick up automatically.
+   ================================================================ */
+
+[data-theme="dark"] body {
+  background-color: #0b1220;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .portal-container {
+  background-color: #0b1220;
+}
+
+/* Sidebar */
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .sidebar-footer {
+  background-color: rgba(17, 25, 38, 0.97) !important;
+  border-right-color: #26334a;
+}
+
+[data-theme="dark"] .toggle-trigger-action {
+  background: #16202f;
+  border-color: #26334a;
+}
+
+[data-theme="dark"] .nav-item {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .nav-item:hover,
+[data-theme="dark"] .nav-item.active {
+  background-color: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .logo-text-bottom {
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .trainer-info h4 {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .trainer-info p {
+  color: #64748b;
+}
+
+[data-theme="dark"] .user-profile-wrapper {
+  background-color: transparent !important;
+}
+
+[data-theme="dark"] .sidebar.expanded .user-profile-wrapper {
+  border-color: #26334a !important;
+}
+
+[data-theme="dark"] .table-avatar-img {
+  border-color: #26334a !important;
+  outline-color: #344259;
+}
+
+[data-theme="dark"] .profile-popup-menu {
+  background: #16202f;
+  border-color: #26334a;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+}
+
+[data-theme="dark"] .profile-popup-item {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .profile-popup-item:hover {
+  background: #1e2d44;
+}
+
+[data-theme="dark"] .profile-popup-item.logout-popup-item {
+  color: #f87171;
+}
+
+[data-theme="dark"] .profile-popup-item.logout-popup-item:hover {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+/* Mobile header */
+[data-theme="dark"] .mobile-header-notch-bar {
+  background: rgba(17, 25, 38, 0.97);
+  border-bottom-color: #26334a;
+}
+
+/* Main content cards */
+[data-theme="dark"] .main-content {
+  background-color: #0b1220;
+}
+
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .schedule-compact-widget,
+[data-theme="dark"] .gender-section-card,
+[data-theme="dark"] .course-clean-card,
+[data-theme="dark"] .expanded-course-workspace-card,
+[data-theme="dark"] .table-responsive-wrapper,
+[data-theme="dark"] .attendance-stat-card,
+[data-theme="dark"] .attendance-records-card-frame,
+[data-theme="dark"] .attendance-overview-card,
+[data-theme="dark"] .attendance-month-table-card,
+[data-theme="dark"] .quiz-results-card-frame,
+[data-theme="dark"] .workspace-card-view,
+[data-theme="dark"] .submission-detail-panel,
+[data-theme="dark"] .submission-list-panel,
+[data-theme="dark"] .course-progress-overview-block,
+[data-theme="dark"] .my-progress-panel,
+[data-theme="dark"] .other-slots-panel,
+[data-theme="dark"] .profile-info-card,
+[data-theme="dark"] .submission-stat-card {
+  background-color: #16202f !important;
+  border-color: #26334a;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .stat-content p,
+[data-theme="dark"] .location-text,
+[data-theme="dark"] .text-small,
+[data-theme="dark"] .gender-section-meta,
+[data-theme="dark"] .muted-small-text,
+[data-theme="dark"] .muted-italic-text,
+[data-theme="dark"] .info-label,
+[data-theme="dark"] .sub-detail-email,
+[data-theme="dark"] .feedback-text-cell,
+[data-theme="dark"] .module-topics-text,
+[data-theme="dark"] .other-slots-label,
+[data-theme="dark"] .my-progress-label,
+[data-theme="dark"] .progress-compare-label,
+[data-theme="dark"] .overall-progress-label-row {
+  color: #64748b;
+}
+
+[data-theme="dark"] .stat-content h3,
+[data-theme="dark"] .stat-card h4,
+[data-theme="dark"] .gender-section-card h3,
+[data-theme="dark"] .dashboard-title-row h1,
+[data-theme="dark"] .attendance-top-header-row h1,
+[data-theme="dark"] .calendar-page-wrapper h1,
+[data-theme="dark"] .profile-page-wrapper h1,
+[data-theme="dark"] .course-header-interactive-row h2,
+[data-theme="dark"] .submission-view-title,
+[data-theme="dark"] .section-title-bar h3,
+[data-theme="dark"] .attendance-records-header-row h3,
+[data-theme="dark"] .quiz-results-card-frame h3,
+[data-theme="dark"] .profile-info-card h3,
+[data-theme="dark"] .attendance-stat-card h3,
+[data-theme="dark"] .tab-action-header-row h3,
+[data-theme="dark"] .submission-list-header h4,
+[data-theme="dark"] .submission-detail-header h3,
+[data-theme="dark"] .module-name,
+[data-theme="dark"] .other-slot-trainer,
+[data-theme="dark"] .trainer-info h4 {
+  color: #f8fafc;
+}
+
+/* Tables */
+[data-theme="dark"] .client-data-table th {
+  background: #131c2b;
+  color: #64748b;
+  border-bottom-color: #26334a;
+}
+
+[data-theme="dark"] .client-data-table td {
+  border-bottom-color: #1e2d44;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .client-data-table tr:hover td {
+  background: #1e2d44;
+}
+
+[data-theme="dark"] .table-filter-header-flex {
+  border-bottom-color: #26334a;
+}
+
+[data-theme="dark"] .table-search-input-box,
+[data-theme="dark"] .status-filter-dropdown {
+  background: #131c2b;
+  border-color: #26334a;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .table-pagination-footer-row {
+  border-top-color: #26334a;
+}
+
+[data-theme="dark"] .pagination-nav-btn,
+[data-theme="dark"] .pagination-page-num {
+  background: #16202f;
+  border-color: #26334a;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .pagination-page-num.active-page {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+/* Buttons */
+[data-theme="dark"] .btn-outline-action {
+  background: #16202f;
+  border-color: #344259;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .btn-outline-action:hover {
+  border-color: #60a5fa;
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .btn-dark-action {
+  background: #1d4ed8;
+}
+
+[data-theme="dark"] .eye-action-btn {
+  background: #131c2b;
+  border-color: #26334a;
+  color: #64748b;
+}
+
+[data-theme="dark"] .eye-action-btn:hover {
+  color: #60a5fa;
+  border-color: #60a5fa;
+}
+
+[data-theme="dark"] .cal-nav-btn {
+  background: #16202f;
+  border-color: #26334a;
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .cal-nav-btn:hover {
+  border-color: #60a5fa;
+}
+
+[data-theme="dark"] .toggle-pill-btn {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .toggle-pill-btn.toggle-active {
+  background: #16202f;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .overall-slot-toggle-group {
+  background: #131c2b;
+}
+
+[data-theme="dark"] .month-select-dropdown,
+[data-theme="dark"] .date-input-block input,
+[data-theme="dark"] .attendance-date-picker-input,
+[data-theme="dark"] .submission-search-input,
+[data-theme="dark"] .profile-name-edit-input,
+[data-theme="dark"] .info-edit-input {
+  background: #131c2b;
+  border-color: #26334a;
+  color: #e2e8f0;
+}
+
+/* Tabs */
+[data-theme="dark"] .tabs-header-navigation-bar {
+  border-bottom-color: #26334a;
+}
+
+[data-theme="dark"] .nav-tab-item-btn {
+  color: #64748b;
+}
+
+[data-theme="dark"] .nav-tab-item-btn.tab-active {
+  color: #60a5fa;
+  border-bottom-color: #60a5fa;
+}
+
+/* Course cards */
+[data-theme="dark"] .batch-outline-pill {
+  background: #131c2b;
+  border-color: #26334a;
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .progress-bar-rail {
+  background-color: #1d2839;
+}
+
+[data-theme="dark"] .meta-footer-info {
+  border-top-color: #26334a;
+}
+
+[data-theme="dark"] .card-top-accent {
+  border-bottom-color: #26334a;
+}
+
+/* Calendar */
+[data-theme="dark"] .calendar-card-frame {
+  background: #16202f;
+  border-color: #26334a;
+}
+
+[data-theme="dark"] .cal-weekday-cell {
+  color: #64748b;
+  border-bottom-color: #26334a;
+}
+
+[data-theme="dark"] .cal-day-cell {
+  border-color: #1e2d44;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .cal-day-cell.cal-empty {
+  background: #131c2b;
+}
+
+[data-theme="dark"] .cal-day-cell.cal-today {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+[data-theme="dark"] .cal-today .cal-day-number-row span:first-child {
+  background: #2563eb;
+  color: #fff;
+}
+
+[data-theme="dark"] .cal-day-dot {
+  background: #60a5fa;
+}
+
+[data-theme="dark"] .cal-event-pill {
+  color: #1e3a8a;
+}
+
+/* Profile */
+[data-theme="dark"] .profile-info-card {
+  border-color: #26334a;
+}
+
+[data-theme="dark"] .info-row-item {
+  border-bottom-color: #1e2d44;
+}
+
+[data-theme="dark"] .info-value {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .role-pill-tag {
+  background: #2d1f06;
+  color: #fbbf24;
+  border-color: #78501a;
+}
+
+[data-theme="dark"] .profile-cover-overlay {
+  background: linear-gradient(135deg, rgba(11,28,61,0.85) 0%, rgba(20,42,82,0.75) 50%, rgba(184,134,46,0.55) 100%);
+}
+
+/* Submission panels */
+[data-theme="dark"] .submission-list-item {
+  border-bottom-color: #1e2d44;
+}
+
+[data-theme="dark"] .submission-list-item:hover {
+  background: #1e2d44;
+}
+
+[data-theme="dark"] .submission-list-item.sub-item-active {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+[data-theme="dark"] .sub-item-name {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .sub-detail-description-box {
+  background: #131c2b;
+  border-color: #26334a;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .sub-no-files-box {
+  border-color: #26334a;
+  color: #64748b;
+}
+
+[data-theme="dark"] .sub-toggle-btn {
+  background: #131c2b;
+  border-color: #26334a;
+  color: #94a3b8;
+}
+
+/* Attendance */
+[data-theme="dark"] .summary-pill-card {
+  border-color: #26334a;
+}
+
+[data-theme="dark"] .gray-theme-box {
+  background: #131c2b;
+}
+
+[data-theme="dark"] .overview-progress-rail {
+  background: #1d2839;
+}
+
+[data-theme="dark"] .attendance-date-picker-row label {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .no-records-found-state {
+  border-color: #26334a;
+  color: #64748b;
+}
+
+/* Progress */
+[data-theme="dark"] .module-row-item {
+  background: #131c2b;
+  border-color: #26334a;
+}
+
+[data-theme="dark"] .other-slot-card {
+  background: #131c2b;
+  border-color: #26334a;
+}
+
+[data-theme="dark"] .overall-progress-bar-blue {
+  background: #1d2839;
+}
+
+/* Breadcrumbs */
+[data-theme="dark"] .breadcrumbs {
+  color: #64748b;
+}
+
+[data-theme="dark"] .current-crumb {
+  color: #e2e8f0;
+}
+
+/* Login (in case user sees it on dark) */
+[data-theme="dark"] .login-viewport-container {
+  background-color: #0b1220;
+}
+
+[data-theme="dark"] .login-auth-card {
+  background: #16202f;
+  border-color: #26334a;
+}
+
+[data-theme="dark"] .form-input-group label {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .form-input-group input {
+  background: #131c2b;
+  border-color: #26334a;
+  color: #e2e8f0;
+}
+
+/* Hackathon / special rows */
+[data-theme="dark"] .hackathon-row {
+  background: rgba(124, 58, 237, 0.08);
+}
+
+/* Modal */
+[data-theme="dark"] .sidebar-mobile-overlay-shade {
+  background: rgba(0,0,0,0.6);
+}
+
+/* Theme-switch toggle in popup */
+[data-theme="dark"] .mini-theme-switch {
+  background: #344259;
+}
+
+[data-theme="dark"] .mini-theme-switch.on {
+  background: #2563eb;
+}
+
+[data-theme="dark"] .mini-theme-knob {
+  background: #fff;
+}

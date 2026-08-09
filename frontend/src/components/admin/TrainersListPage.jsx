@@ -218,6 +218,7 @@ export function TrainersListPage() {
       {formModal?.mode === "add" && (
         <TrainerFormModal
           title="Add new trainer"
+          mode="add"
           initialValues={EMPTY_TRAINER_FORM}
           onClose={() => setFormModal(null)}
           onSave={handleAdd}
@@ -228,6 +229,7 @@ export function TrainersListPage() {
       {formModal?.mode === "edit" && (
         <TrainerFormModal
           title="Edit trainer"
+          mode="edit"
           initialValues={formModal.trainer}
           onClose={() => setFormModal(null)}
           onSave={handleEdit}

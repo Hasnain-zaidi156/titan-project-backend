@@ -5,8 +5,8 @@
 
 export const TITAN_LOGO = 'https://i.ibb.co/q3c3CkLS/titan-logo.jpg';
 export const TITAN_LOGO_BG = 'https://i.ibb.co/Zz3Hk1Q5/titan-logo-bg.jpg';
-export const SIR_YASIR_PHOTO = 'https://i.ibb.co/wF2jCyRH/WhatsApp-Image-2026-03-18-at-5-47-44-PM.jpg';
-export const PROFILE_BG_IMG = 'https://i.ibb.co/0FqY1Z2/Whats-App-Image-2026-03-18-at-5-47-44-PM.jpg';
+export const SIR_YASIR_PHOTO = 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80';
+export const PROFILE_BG_IMG = 'https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=1000';
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -16,7 +16,9 @@ export const courses = [
   { id: "CRS-003", title: "Little Geniuses: Coding, Design & AI Fun Lab", type: "LAB | Female", campus: "TITAN Ghotki Campus (Ghotki)", batch: "Batch 1", progress: 0, enrolled: 0, schedule: "Sat 10:00 AM - 12:00 PM | Sun 10:00 AM - 12:00 PM", startedOn: "1 Jun 2026", bgHeader: "#f8fafc", accentColor: "#64748b" },
   { id: "CRS-004", title: "Modern Web Application Development", type: "LAB | Female", campus: "TITAN Ghotki Campus (Ghotki)", batch: "Batch 3", progress: 25, enrolled: 30, schedule: "Sat 08:00 AM - 10:00 AM | Sun 08:00 AM - 10:00 AM", startedOn: "1 Jan 2026", bgHeader: "#ffebe9", accentColor: "#ef4444" },
   { id: "CRS-005", title: "Modern Web Application Development", type: "LAB | Male", campus: "TITAN Ghotki Campus (Ghotki)", batch: "Batch 3", progress: 30, enrolled: 28, schedule: "Sat 08:00 AM - 10:00 AM | Sun 08:00 AM - 10:00 AM", startedOn: "1 Jan 2026", bgHeader: "#e3f2fd", accentColor: "#2563eb" },
-  { id: "CRS-006", title: "Modern Web Application Development", type: "LAB | Male", campus: "Saylani TITAN Sukkur Campus (Sukkur)", batch: "Batch 1", progress: 40, enrolled: 32, schedule: "Mon 06:00 PM - 08:00 PM | Wed 06:00 PM - 08:00 PM | Fri 06:00 PM - 08:00 PM", startedOn: "1 Jan 2026", bgHeader: "#ede9fe", accentColor: "#7c3aed" }
+  { id: "CRS-006", title: "Modern Web Application Development", type: "LAB | Male", campus: "Saylani TITAN Sukkur Campus (Sukkur)", batch: "Batch 1", progress: 40, enrolled: 32, schedule: "Mon 06:00 PM - 08:00 PM | Wed 06:00 PM - 08:00 PM | Fri 06:00 PM - 08:00 PM", startedOn: "1 Jan 2026", bgHeader: "#ede9fe", accentColor: "#7c3aed" },
+  { id: "CRS-007", title: "Graphic Designing", type: "LAB | Male", campus: "TITAN Ghotki Campus (Ghotki)", batch: "Batch 2", progress: 55, enrolled: 18, schedule: "Mon 10:00 AM - 12:00 PM | Wed 10:00 AM - 12:00 PM | Fri 10:00 AM - 12:00 PM", startedOn: "1 Mar 2026", bgHeader: "#fff7ed", accentColor: "#f97316" },
+  { id: "CRS-008", title: "Graphic Designing", type: "LAB | Female", campus: "TITAN Ghotki Campus (Ghotki)", batch: "Batch 2", progress: 50, enrolled: 15, schedule: "Mon 02:00 PM - 04:00 PM | Wed 02:00 PM - 04:00 PM | Fri 02:00 PM - 04:00 PM", startedOn: "1 Mar 2026", bgHeader: "#fdf4ff", accentColor: "#a855f7" },
 ];
 
 export const studentNames = [

@@ -2,7 +2,7 @@ import React from 'react';
 import { modalOverlayStyle, modalCardStyle, modalCloseBtnStyle, modalLabelStyle } from '../modalStyles';
 
 const AssignmentsTab = ({
-  displayedAssignments, assignmentsLoading, openNewAssignmentModal,
+  displayedAssignments, assignmentsLoading, openNewAssignmentModal, openEditAssignmentModal,
   selectedAssignment, setSelectedAssignment,
   selectedSubmission, setSelectedSubmission,
   selectedSubmissionIdx, setSelectedSubmissionIdx,
@@ -50,7 +50,7 @@ const AssignmentsTab = ({
                     </button>
                   </td>
                   <td>
-                    <button className="icon-edit-btn" title="Edit">
+                    <button className="icon-edit-btn" title="Edit" onClick={() => openEditAssignmentModal && openEditAssignmentModal(asgn)}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                     </button>
                   </td>
@@ -124,9 +124,9 @@ const AssignmentsTab = ({
           <div style={modalOverlayStyle} onClick={() => setSelectedSubmission(null)}>
             <div style={{ ...modalCardStyle, maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
               <div className="submission-detail-panel animated-fade" style={{ padding: 0 }}>
-                <div className="submission-detail-header">
+                <div className="submission-detail-header" style={{ paddingBottom: '16px', borderBottom: '1px solid #e2e8f0', marginBottom: '16px' }}>
                   <div>
-                    <h3 style={{ margin: 0 }}>Assignment Information</h3>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b' }}>Assignment Information</h3>
                   </div>
                   <button style={modalCloseBtnStyle} onClick={() => setSelectedSubmission(null)}>✕</button>
                 </div>

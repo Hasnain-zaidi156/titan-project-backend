@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 
 import TitanPortal from "./components/TitanPortal";
-import Dashboard from "./components/Dashboard";
+import Dashboard from "./components/trainer/Dashboard";
 import StudentDashboard from "./components/student/StudentDashboard";
 import StudentAuth from "./components/StudentAuth";
 
@@ -71,6 +71,16 @@ function App() {
     });
   };
 
+  const handleUpdateUser = (updatedData) => {
+    setUser((prev) => {
+      if (!prev.isLoggedIn) return prev;
+      return {
+        ...prev,
+        data: { ...prev.data, ...updatedData },
+      };
+    });
+  };
+
   const handleLogout = () => {
     setUser({
       isLoggedIn: false,
@@ -115,7 +125,12 @@ function App() {
           path="/trainer"
           element={
             user.isLoggedIn && user.role === "trainer" ? (
-              <Dashboard onLogout={handleLogout} />
+              // trainer={user.data} = real admin-saved record jo TitanPortal
+              // login se aaya (id, name, email, photo, courses[], cities[],
+              // campus, slotSchedule, status) — pehle yeh prop pass hi nahi
+              // ho rahi thi, isliye Dashboard hamesha apna purana/hardcoded
+              // fallback data dikha raha tha.
+              <Dashboard trainer={user.data} onLogout={handleLogout} onUpdateUser={handleUpdateUser} />
             ) : (
               <Navigate to="/" replace />
             )
@@ -134,6 +149,12 @@ function App() {
                 rollNumber={user.data?.rollNumber}
                 course={user.data?.course}
                 campus={user.data?.campus}
+                cnic={user.data?.cnic}
+                dob={user.data?.dob}
+                email={user.data?.email}
+                phone={user.data?.phone}
+                photo={user.data?.photo}
+                timing={user.data?.timing}
                 onLogout={handleLogout}
               />
             ) : (

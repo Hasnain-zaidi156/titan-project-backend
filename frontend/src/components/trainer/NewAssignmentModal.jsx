@@ -8,6 +8,7 @@ const NewAssignmentModal = ({
   show, setShow, selectedCourse,
   newAssignmentForm, setNewAssignmentForm,
   assignmentFormError, creatingAssignment, submitNewAssignment,
+  isEditing = false,
 }) => {
   if (!show) return null;
 
@@ -15,11 +16,13 @@ const NewAssignmentModal = ({
     <div style={modalOverlayStyle} onClick={() => !creatingAssignment && setShow(false)}>
       <div style={modalCardStyle} onClick={(e) => e.stopPropagation()}>
         <div style={modalHeaderStyle}>
-          <h2 style={{ margin: 0, fontSize: '18px' }}>New Assignment</h2>
+          <h2 style={{ margin: 0, fontSize: '18px' }}>
+            {isEditing ? 'Edit Assignment' : 'New Assignment'}
+          </h2>
           <button style={modalCloseBtnStyle} onClick={() => setShow(false)}>✕</button>
         </div>
         <p style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>
-          For {selectedCourse?.title} — visible to students the moment you save it.
+          For {selectedCourse?.title} — {isEditing ? 'updates will be visible to students.' : 'visible to students the moment you save it.'}
         </p>
 
         <label style={modalLabelStyle}>Title *</label>
@@ -51,7 +54,9 @@ const NewAssignmentModal = ({
         <div style={modalActionsStyle}>
           <button style={modalCancelBtnStyle} onClick={() => setShow(false)} disabled={creatingAssignment}>Cancel</button>
           <button style={modalPrimaryBtnStyle} onClick={submitNewAssignment} disabled={creatingAssignment}>
-            {creatingAssignment ? 'Publishing…' : 'Publish Assignment'}
+            {creatingAssignment 
+              ? (isEditing ? 'Saving…' : 'Publishing…') 
+              : (isEditing ? 'Save Changes' : 'Publish Assignment')}
           </button>
         </div>
       </div>

@@ -11,13 +11,11 @@ const ProfilePage = ({
     <div className="profile-page-wrapper animated-fade">
       <div className="profile-cover-banner" style={{ backgroundImage: `url(${PROFILE_BG_IMG})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
         <div className="profile-cover-overlay"></div>
-        <div className="profile-cover-avatar-wrap">
+        <div className="profile-cover-avatar-wrap" onClick={() => { if (!isEditingProfile) startEditingProfile(); setTimeout(() => photoInputRef.current?.click(), 50); }} style={{ cursor: 'pointer' }}>
           <img src={isEditingProfile ? profilePhotoDraft : profilePhoto} alt="Avatar" className="profile-cover-avatar" />
-          {isEditingProfile && (
-            <button className="profile-photo-upload-btn" onClick={() => photoInputRef.current?.click()} title="Change photo">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-            </button>
-          )}
+          <button className="profile-photo-upload-btn" onClick={(e) => { e.stopPropagation(); if (!isEditingProfile) startEditingProfile(); setTimeout(() => photoInputRef.current?.click(), 50); }} title="Change photo">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+          </button>
           <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
         </div>
       </div>

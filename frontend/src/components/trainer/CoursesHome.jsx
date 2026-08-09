@@ -1,18 +1,21 @@
 import React from 'react';
-import { courses } from './mockData';
+import { courses as allMockCourses } from './mockData';
 
 const CoursesHome = ({
+  courses, // trainer ke assigned courses (Dashboard se aata hai); na aaye to sab mock courses dikhte hain
   genderSection, setGenderSection,
   courseSearchQuery, setCourseSearchQuery,
   setSelectedCourse, setActiveCourseTab, setStudentsPage,
   setSelectedAssignment, setSelectedQuiz,
 }) => {
-  const maleCourses = courses.filter(c => c.type.includes('Male'));
-  const femaleCourses = courses.filter(c => c.type.includes('Female'));
+  const courseList = courses || allMockCourses;
+  const maleCourses = courseList.filter(c => c.type.includes('Male'));
+  const femaleCourses = courseList.filter(c => c.type.includes('Female'));
   const maleEnrolledTotal = maleCourses.reduce((sum, c) => sum + c.enrolled, 0);
   const femaleEnrolledTotal = femaleCourses.reduce((sum, c) => sum + c.enrolled, 0);
+  const totalEnrolled = maleEnrolledTotal + femaleEnrolledTotal;
 
-  const sectionCourses = (genderSection ? courses.filter(c => c.type.includes(genderSection)) : []).filter(c => {
+  const sectionCourses = (genderSection ? courseList.filter(c => c.type.includes(genderSection)) : []).filter(c => {
     const q = courseSearchQuery.toLowerCase();
     if (!q) return true;
     return c.title.toLowerCase().includes(q) || c.campus.toLowerCase().includes(q) || c.batch.toLowerCase().includes(q);
@@ -22,8 +25,8 @@ const CoursesHome = ({
     <>
       <div className="dashboard-title-row"><h1>Dashboard</h1></div>
       <section className="stats-grid-row">
-        <div className="stat-card"><div className="stat-content"><h3>6</h3><p>Active Courses</p></div><div className="stat-badge-icon green-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg></div></div>
-        <div className="stat-card"><div className="stat-content"><h3>102</h3><p>Enrolled Students</p></div><div className="stat-badge-icon blue-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg></div></div>
+        <div className="stat-card"><div className="stat-content"><h3>{courseList.length}</h3><p>Active Courses</p></div><div className="stat-badge-icon green-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg></div></div>
+        <div className="stat-card"><div className="stat-content"><h3>{totalEnrolled}</h3><p>Enrolled Students</p></div><div className="stat-badge-icon blue-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg></div></div>
         <div className="stat-card"><div className="stat-content"><h3>0</h3><p>Total Assignments</p></div><div className="stat-badge-icon purple-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg></div></div>
         <div className="schedule-compact-widget">
           <div className="schedule-title-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>Teaching Schedule</div>

@@ -3,6 +3,7 @@ import { Icon, ICONS } from "./Icon";
 import { useEscapeKey } from "./hooks";
 import { Avatar, PhotoUploadField } from "./Avatar";
 import { CustomSelect } from "./CustomSelect";
+import { DayTimePicker } from "./DayTimePicker";
 import {
   FILTER_FIELDS, COUNTRIES, CITIES, CAMPUSES, COURSES, BATCHES, SLOTS,
   STATUS_OPTIONS, PAYMENT_STATUS_OPTIONS, GENDERS, LAPTOP_OPTIONS,
@@ -208,6 +209,13 @@ export function StudentFormModal({ title, initialValues, onClose, onSave, saving
               {SLOTS.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
+          <div className="ta-filter-field" style={{ gridColumn: "1 / -1" }}>
+            <label>Timing (Days + Time)</label>
+            <DayTimePicker value={form.timing} onChange={(val) => set("timing", val)} />
+            <p className="ta-field-hint" style={{ fontSize: 11, color: "var(--ta-text-muted)", marginTop: 4 }}>
+              Yehi timing trainer ke slot schedule se match karke uske Course card mein student dikhata hai.
+            </p>
+          </div>
           <div className="ta-filter-field">
             <label>Status</label>
             <select className="ta-form-select" value={form.status} onChange={(e) => set("status", e.target.value)}>
@@ -265,6 +273,7 @@ export function ViewStudentModal({ student, onClose }) {
     ["Course", student.course],
     ["Batch", student.batch],
     ["Slot", student.slot],
+    ["Timing", student.timing],
     ["Status", student.status],
     ["Payment Status", student.paymentStatus],
     ["Gender", student.gender],

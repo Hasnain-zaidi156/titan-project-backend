@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './Dashboard.css';
-import './ThemeToggle.css';
+import '../student/ThemeToggle.css';
 
 import { API_BASE, SIR_YASIR_PHOTO, TITAN_LOGO, courses, courseAssignmentsData, courseQuizzesData } from './mockData';
 import Sidebar from './Sidebar';
@@ -13,19 +13,20 @@ import CourseDetailView from './CourseDetailView';
 import NewAssignmentModal from './NewAssignmentModal';
 import NewQuizModal from './NewQuizModal';
 
-const Dashboard = ({ onLogout }) => {
-  // ===== Theme (dark / light mode) =====
-  const [theme, setTheme] = useState(() => {
-    if (typeof window === 'undefined') return 'light';
-    return localStorage.getItem('titan-trainer-theme') || 'light';
-  });
+const getTrainerAvatar = (name, photo) => {
+  if (photo && photo.trim()) return photo;
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Trainer')}&background=1a3c6e&color=fff&size=200`;
+};
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('titan-trainer-theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
+  // trainer = the real record returned by /api/trainer-login (name, email,
+  // employeeId, photo, courses[], cities[], campus, slotSchedule, status).
+  // Course cards shown here are filtered down to only the ones admin
+  // actually assigned to this trainer, so their real students show up.
+  const trainerCourseTitles = trainer?.courses || [];
+  const myCourses = trainerCourseTitles.length > 0
+    ? courses.filter((c) => trainerCourseTitles.includes(c.title))
+    : courses; // fallback: no courses assigned yet -> show all (avoids blank screen)
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentMenu, setCurrentMenu] = useState('dashboard');
@@ -33,6 +34,19 @@ const Dashboard = ({ onLogout }) => {
   const [activeCourseTab, setActiveCourseTab] = useState('students');
   const [searchQuery, setSearchQuery] = useState('');
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  // ===== Theme (dark / light mode) =====
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === "undefined") return "light";
+    return localStorage.getItem("titan-theme") || "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("titan-theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentTab, setStudentTab] = useState('attendance');
   const [studentsPage, setStudentsPage] = useState(1);
@@ -45,7 +59,13 @@ const Dashboard = ({ onLogout }) => {
   const [attendanceCourseFilter, setAttendanceCourseFilter] = useState(0);
   const [attendanceView, setAttendanceView] = useState('overall');
   const [attCourseDropdownOpen, setAttCourseDropdownOpen] = useState(false);
-  const [courseAttendanceDate, setCourseAttendanceDate] = useState('2026-06-17');
+  const [courseAttendanceDate, setCourseAttendanceDate] = useState(() => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
 
   // Gender section
   const [genderSection, setGenderSection] = useState(null);
@@ -64,18 +84,37 @@ const Dashboard = ({ onLogout }) => {
   const [showComparison, setShowComparison] = useState(false);
 
   // Profile editing + photo upload
+  const defaultAvatar = getTrainerAvatar(trainer?.name, trainer?.photo);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [trainerProfile, setTrainerProfile] = useState({
-    name: 'Sir Yasir Ali (SUK)',
-    email: 'yasirlashari131@gmail.com',
-    employeeId: '15353',
+    name: trainer?.name || 'Trainer',
+    email: trainer?.email || '',
+    employeeId: trainer?.employeeId || '',
     hourlyRate: '*******/hr',
-    phone: '03033742231'
+    phone: trainer?.phone || ''
   });
   const [profileDraft, setProfileDraft] = useState(trainerProfile);
-  const [profilePhoto, setProfilePhoto] = useState(SIR_YASIR_PHOTO);
-  const [profilePhotoDraft, setProfilePhotoDraft] = useState(SIR_YASIR_PHOTO);
+  const [profilePhoto, setProfilePhoto] = useState(defaultAvatar);
+  const [profilePhotoDraft, setProfilePhotoDraft] = useState(defaultAvatar);
   const photoInputRef = useRef(null);
+
+  // Sync trainer state whenever trainer prop updates
+  useEffect(() => {
+    if (trainer) {
+      const updated = {
+        name: trainer.name || 'Trainer',
+        email: trainer.email || '',
+        employeeId: trainer.employeeId || '',
+        hourlyRate: trainer.hourlyRate || '*******/hr',
+        phone: trainer.phone || ''
+      };
+      setTrainerProfile(updated);
+      setProfileDraft(updated);
+      const avatarUrl = getTrainerAvatar(trainer.name, trainer.photo);
+      setProfilePhoto(avatarUrl);
+      setProfilePhotoDraft(avatarUrl);
+    }
+  }, [trainer]);
 
   // ===== Live Assignments / Quizzes (synced with the Student Portal via the backend) =====
   const [liveAssignments, setLiveAssignments] = useState([]);
@@ -87,6 +126,7 @@ const Dashboard = ({ onLogout }) => {
   const [newAssignmentForm, setNewAssignmentForm] = useState({ title: '', description: '', dueDate: '' });
   const [creatingAssignment, setCreatingAssignment] = useState(false);
   const [assignmentFormError, setAssignmentFormError] = useState('');
+  const [editingAssignmentId, setEditingAssignmentId] = useState(null);
 
   const [showNewQuizModal, setShowNewQuizModal] = useState(false);
   const [newQuizForm, setNewQuizForm] = useState({ title: '', date: '', expiry: '', totalQuestions: 40 });
@@ -168,7 +208,19 @@ const Dashboard = ({ onLogout }) => {
   });
 
   const openNewAssignmentModal = () => {
+    setEditingAssignmentId(null);
     setNewAssignmentForm({ title: '', description: '', dueDate: '' });
+    setAssignmentFormError('');
+    setShowNewAssignmentModal(true);
+  };
+
+  const openEditAssignmentModal = (asgn) => {
+    setEditingAssignmentId(asgn.id || asgn._id);
+    setNewAssignmentForm({
+      title: asgn.title || '',
+      description: asgn.description || '',
+      dueDate: asgn.dueDate || '',
+    });
     setAssignmentFormError('');
     setShowNewAssignmentModal(true);
   };
@@ -181,8 +233,13 @@ const Dashboard = ({ onLogout }) => {
     setCreatingAssignment(true);
     setAssignmentFormError('');
     try {
-      const res = await fetch(`${API_BASE}/api/assignments`, {
-        method: 'POST',
+      const url = editingAssignmentId 
+        ? `${API_BASE}/api/assignments/${editingAssignmentId}` 
+        : `${API_BASE}/api/assignments`;
+      const method = editingAssignmentId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: newAssignmentForm.title.trim(),
@@ -196,9 +253,15 @@ const Dashboard = ({ onLogout }) => {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to create assignment');
-      setLiveAssignments((prev) => [data, ...prev]);
+      if (!res.ok) throw new Error(data.message || 'Failed to save assignment');
+
+      if (editingAssignmentId) {
+        setLiveAssignments((prev) => prev.map(a => a.id === data.id ? data : a));
+      } else {
+        setLiveAssignments((prev) => [data, ...prev]);
+      }
       setShowNewAssignmentModal(false);
+      setEditingAssignmentId(null);
     } catch (err) {
       setAssignmentFormError(err.message || 'Something went wrong. Please try again.');
     } finally {
@@ -291,15 +354,36 @@ const Dashboard = ({ onLogout }) => {
 
   // ===== Live students (from the admin database) for the selected course =====
   const [liveStudents, setLiveStudents] = useState([]);
-  const [liveStudentsLoading, setLiveStudentsLoading] = useState(false);
-
-  const fetchLiveStudents = async (course) => {
+  const [liveStudentsLoading, setLiveStudentsLoading] = useState(false);  const fetchLiveStudents = async (course) => {
     if (!course) return;
     setLiveStudentsLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/students`);
       const data = await res.json();
-      const forCourse = (Array.isArray(data) ? data : []).filter((s) => s.course === course);
+      const allStudents = Array.isArray(data) ? data : [];
+      const forCourse = allStudents.filter((s) => {
+        const matchCourse = s.course && (s.course === course || s.course.toLowerCase().trim() === course.toLowerCase().trim());
+        if (!matchCourse) return false;
+
+        // If trainer has slotSchedule / shift timing assigned, filter by timing/slot
+        if (trainer?.slotSchedule && (s.timing || s.slot)) {
+          const sTiming = (s.timing || s.slot || '').toLowerCase().trim();
+          const tSchedule = trainer.slotSchedule.toLowerCase().trim();
+          if (sTiming && tSchedule) {
+            const dayMatch = (sTiming.includes('sat') && tSchedule.includes('sat')) ||
+                             (sTiming.includes('sun') && tSchedule.includes('sun')) ||
+                             (sTiming.includes('mon') && tSchedule.includes('mon')) ||
+                             (sTiming.includes('tue') && tSchedule.includes('tue')) ||
+                             (sTiming.includes('wed') && tSchedule.includes('wed')) ||
+                             (sTiming.includes('thu') && tSchedule.includes('thu')) ||
+                             (sTiming.includes('fri') && tSchedule.includes('fri'));
+            if (!dayMatch && !sTiming.includes(tSchedule) && !tSchedule.includes(sTiming)) {
+              return false;
+            }
+          }
+        }
+        return true;
+      });
       setLiveStudents(forCourse);
     } catch (err) {
       console.error('Failed to load students:', err);
@@ -343,24 +427,50 @@ const Dashboard = ({ onLogout }) => {
     setIsEditingProfile(true);
   };
 
-  const saveProfileEdits = () => {
+  const cancelEditingProfile = () => {
+    setIsEditingProfile(false);
+  };
+
+  const saveProfileEdits = async () => {
     setTrainerProfile(profileDraft);
     setProfilePhoto(profilePhotoDraft);
     setIsEditingProfile(false);
-  };
 
-  const cancelEditingProfile = () => {
-    setProfileDraft(trainerProfile);
-    setProfilePhotoDraft(profilePhoto);
-    setIsEditingProfile(false);
+    if (trainer?.id || trainer?._id) {
+      try {
+        const id = trainer.id || trainer._id;
+        const res = await fetch(`${API_BASE}/api/trainers/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: profileDraft.name,
+            email: profileDraft.email,
+            employeeId: profileDraft.employeeId,
+            photo: profilePhotoDraft,
+            phone: profileDraft.phone,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (onUpdateUser) onUpdateUser(data);
+        }
+      } catch (err) {
+        console.error('Failed to update trainer profile on backend:', err);
+      }
+    }
   };
 
   const handlePhotoChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setProfilePhotoDraft(ev.target.result);
-    reader.readAsDataURL(file);
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (ev.target && ev.target.result) {
+          setProfilePhotoDraft(ev.target.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const downloadTrainerCard = () => {
@@ -368,6 +478,8 @@ const Dashboard = ({ onLogout }) => {
     canvas.width = 700;
     canvas.height = 420;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
     const drawRoundedRect = (x, y, w, h, r) => {
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -377,54 +489,73 @@ const Dashboard = ({ onLogout }) => {
       ctx.arcTo(x, y, x + w, y, r);
       ctx.closePath();
     };
+
     const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
     grad.addColorStop(0, '#1e40af');
     grad.addColorStop(1, '#4338ca');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     ctx.fillStyle = '#ffffff';
     drawRoundedRect(30, 30, 640, 360, 16);
     ctx.fill();
+
     const initials = trainerProfile.name.replace(/\(.*?\)/g, '').trim().split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+
     ctx.beginPath();
     ctx.arc(115, 130, 50, 0, Math.PI * 2);
     ctx.fillStyle = '#1e40af';
     ctx.fill();
+
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 32px Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(initials, 115, 134);
+
     ctx.fillStyle = '#111111';
     ctx.font = 'bold 24px Arial, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(trainerProfile.name, 190, 112);
+
     ctx.fillStyle = '#eff6ff';
     drawRoundedRect(190, 124, 78, 26, 6);
     ctx.fill();
+
     ctx.fillStyle = '#1e40af';
     ctx.font = 'bold 13px Arial, sans-serif';
     ctx.fillText('Trainer', 203, 142);
+
     ctx.strokeStyle = '#eaeaea';
     ctx.beginPath();
     ctx.moveTo(60, 210);
     ctx.lineTo(640, 210);
     ctx.stroke();
-    const details = [['Email', trainerProfile.email], ['Employee ID', trainerProfile.employeeId], ['Hourly Rate', trainerProfile.hourlyRate], ['Phone', trainerProfile.phone]];
+
+    const details = [
+      ['Email', trainerProfile.email],
+      ['Employee ID', trainerProfile.employeeId],
+      ['Hourly Rate', trainerProfile.hourlyRate],
+      ['Phone', trainerProfile.phone],
+    ];
+
     let y = 245;
     details.forEach(([label, value]) => {
       ctx.fillStyle = '#666666';
       ctx.font = '13px Arial, sans-serif';
       ctx.fillText(label, 60, y);
+
       ctx.fillStyle = '#111111';
       ctx.font = 'bold 14px Arial, sans-serif';
       ctx.fillText(String(value), 230, y);
       y += 34;
     });
+
     ctx.fillStyle = '#9ca3af';
     ctx.font = '11px Arial, sans-serif';
     ctx.fillText('TITAN — Taj Institute of Technology and Applied Networks', 60, 372);
+
     const link = document.createElement('a');
     link.download = `${trainerProfile.name.replace(/[^a-zA-Z0-9]+/g, '_')}_TITAN_Card.png`;
     link.href = canvas.toDataURL('image/png');
@@ -439,10 +570,9 @@ const Dashboard = ({ onLogout }) => {
     setCalMonth(m); setCalYear(y);
   };
 
-  // Live (real, teacher-created) items first, then the original demo rows —
-  // so the page never looks empty even before any real data exists.
-  const displayedAssignments = [...liveAssignments.map(mapLiveAssignment), ...courseAssignmentsData];
-  const displayedQuizzes = [...liveQuizzes.map(mapLiveQuiz), ...courseQuizzesData];
+  // Live (real, teacher-created) items from backend database
+  const displayedAssignments = liveAssignments.map(mapLiveAssignment);
+  const displayedQuizzes = liveQuizzes.map(mapLiveQuiz);
 
   // Submission state management
   const [submissionApprovals, setSubmissionApprovals] = useState({});
@@ -459,32 +589,13 @@ const Dashboard = ({ onLogout }) => {
 
   return (
     <div className="portal-container">
-      <button
-        type="button"
-        className="theme-toggle-btn"
-        onClick={toggleTheme}
-        aria-label="Toggle dark mode"
-        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-      >
-        {theme === 'dark' ? (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
-        ) : (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
-        )}
-      </button>
-
       <div className="mobile-header-notch-bar">
         <button className="mobile-hamburger-btn" onClick={toggleSidebar} aria-label="Menu">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        <img
-          src={TITAN_LOGO}
-          alt="TITAN"
-          className="mobile-brand-logo-img"
-          style={theme === 'dark' ? { background: '#fff', borderRadius: '8px', padding: '3px' } : undefined}
-        />
+        <img src={TITAN_LOGO} alt="TITAN" className="mobile-brand-logo-img" />
       </div>
 
       {isSidebarOpen && <div className="sidebar-mobile-overlay-shade" onClick={() => setIsSidebarOpen(false)}></div>}
@@ -541,6 +652,7 @@ const Dashboard = ({ onLogout }) => {
           <>
             {!selectedCourse ? (
               <CoursesHome
+                courses={myCourses}
                 genderSection={genderSection}
                 setGenderSection={setGenderSection}
                 courseSearchQuery={courseSearchQuery}
@@ -586,6 +698,7 @@ const Dashboard = ({ onLogout }) => {
                 displayedAssignments={displayedAssignments}
                 assignmentsLoading={assignmentsLoading}
                 openNewAssignmentModal={openNewAssignmentModal}
+                openEditAssignmentModal={openEditAssignmentModal}
                 selectedAssignment={selectedAssignment}
                 selectedSubmission={selectedSubmission}
                 setSelectedSubmission={setSelectedSubmission}
@@ -618,6 +731,7 @@ const Dashboard = ({ onLogout }) => {
         assignmentFormError={assignmentFormError}
         creatingAssignment={creatingAssignment}
         submitNewAssignment={submitNewAssignment}
+        isEditing={!!editingAssignmentId}
       />
 
       <NewQuizModal

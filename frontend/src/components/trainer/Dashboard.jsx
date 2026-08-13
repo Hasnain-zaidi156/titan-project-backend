@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import './Dashboard.css';
 import '../student/ThemeToggle.css';
 
-import { API_BASE, SIR_YASIR_PHOTO, TITAN_LOGO, courses, courseAssignmentsData, courseQuizzesData } from './mockData';
+import { API_BASE, TITAN_LOGO } from './constants';
 import Sidebar from './Sidebar';
 import ProfilePage from './ProfilePage';
 import CalendarPage from './CalendarPage';
@@ -18,15 +18,65 @@ const getTrainerAvatar = (name, photo) => {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Trainer')}&background=1a3c6e&color=fff&size=200`;
 };
 
+const CARD_PALETTE = [
+  { bgHeader: '#e6fdf4', accentColor: '#10b981' },
+  { bgHeader: '#eff2fe', accentColor: '#4f46e5' },
+  { bgHeader: '#fff7ed', accentColor: '#f97316' },
+  { bgHeader: '#fdf4ff', accentColor: '#a855f7' },
+  { bgHeader: '#e3f2fd', accentColor: '#2563eb' },
+  { bgHeader: '#ffebe9', accentColor: '#ef4444' },
+  { bgHeader: '#ede9fe', accentColor: '#7c3aed' },
+  { bgHeader: '#f8fafc', accentColor: '#64748b' },
+];
+
 const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
   // trainer = the real record returned by /api/trainer-login (name, email,
   // employeeId, photo, courses[], cities[], campus, slotSchedule, status).
-  // Course cards shown here are filtered down to only the ones admin
-  // actually assigned to this trainer, so their real students show up.
+  // Course "cards" are built live from the real Students collection —
+  // grouped by course + campus + batch + gender — filtered to only the
+  // courses admin actually assigned to this trainer.
   const trainerCourseTitles = trainer?.courses || [];
-  const myCourses = trainerCourseTitles.length > 0
-    ? courses.filter((c) => trainerCourseTitles.includes(c.title))
-    : courses; // fallback: no courses assigned yet -> show all (avoids blank screen)
+  const [myCourses, setMyCourses] = useState([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCoursesLoading(true);
+    fetch(`${API_BASE}/api/students`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const allStudents = Array.isArray(data) ? data : [];
+        const relevant = trainerCourseTitles.length > 0
+          ? allStudents.filter((s) => trainerCourseTitles.includes(s.course))
+          : allStudents;
+
+        const groups = new Map();
+        relevant.forEach((s) => {
+          const key = `${s.course}||${s.campus}||${s.batch}||${s.gender}`;
+          if (!groups.has(key)) {
+            groups.set(key, {
+              id: key,
+              title: s.course || 'Untitled Course',
+              type: `LAB | ${s.gender || 'Mixed'}`,
+              campus: s.campus || '—',
+              batch: s.batch || '—',
+              schedule: s.timing || trainer?.slotSchedule || '—',
+              startedOn: s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
+              progress: 0,
+              enrolled: 0,
+            });
+          }
+          groups.get(key).enrolled += 1;
+        });
+
+        const list = [...groups.values()].map((c, idx) => ({ ...c, ...CARD_PALETTE[idx % CARD_PALETTE.length] }));
+        setMyCourses(list);
+      })
+      .catch((err) => { console.error('Failed to load courses:', err); if (!cancelled) setMyCourses([]); })
+      .finally(() => { if (!cancelled) setCoursesLoading(false); });
+    return () => { cancelled = true; };
+  }, [trainer?.employeeId]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentMenu, setCurrentMenu] = useState('dashboard');
@@ -580,8 +630,7 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
     const liveMatch = liveAssignments.find((a) => a.id === assignId);
     if (liveMatch) return liveMatch.submissions[subIdx]?.approved ?? null;
     const key = `${assignId}-${subIdx}`;
-    if (submissionApprovals[key] !== undefined) return submissionApprovals[key];
-    return courseAssignmentsData.find(a => a.id === assignId)?.submissions[subIdx]?.approved ?? null;
+    return submissionApprovals[key] ?? null;
   };
   const setSubApproval = (assignId, subIdx, val) => {
     setSubmissionApprovals(prev => ({ ...prev, [`${assignId}-${subIdx}`]: val }));
@@ -639,6 +688,7 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
 
         {currentMenu === 'attendance' && (
           <AttendancePage
+            courses={myCourses}
             attendanceCourseFilter={attendanceCourseFilter}
             setAttendanceCourseFilter={setAttendanceCourseFilter}
             attCourseDropdownOpen={attCourseDropdownOpen}
@@ -653,6 +703,7 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
             {!selectedCourse ? (
               <CoursesHome
                 courses={myCourses}
+                coursesLoading={coursesLoading}
                 genderSection={genderSection}
                 setGenderSection={setGenderSection}
                 courseSearchQuery={courseSearchQuery}
@@ -716,6 +767,7 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
 
                 showComparison={showComparison}
                 setShowComparison={setShowComparison}
+                trainer={trainer}
               />
             )}
           </>

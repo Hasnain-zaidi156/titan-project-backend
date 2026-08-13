@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Icon, ICONS } from "./Icon";
 import { useEscapeKey } from "./hooks";
 import { CITIES, CAMPUSES } from "../../constants/studentConstants";
-import { TRAINERS_FULL_LIST } from "../../constants/trainerConstants";
 import { TODAY_REF, toYMD } from "../../utils/dateUtils";
 
 // Exported taake TrainerAttendanceRequestPage bhi isko reuse kar sake
@@ -11,7 +10,7 @@ export function TrainerAttendanceFiltersModal({ onClose, onApply, initialValues,
   useEscapeKey(onClose);
   const set = (key, val) => setValues((v) => ({ ...v, [key]: val }));
 
-  const trainerList = trainers?.length ? trainers : TRAINERS_FULL_LIST;
+  const trainerList = trainers || [];
   const trainerNames = trainerList.map((t) => t.name);
   const courseNames = [...new Set(trainerList.flatMap((t) => t.courses))];
   const scheduleOptions = [...new Set(trainerList.map((t) => t.slotSchedule))];

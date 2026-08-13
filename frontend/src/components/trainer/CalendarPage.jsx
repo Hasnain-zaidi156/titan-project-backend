@@ -1,5 +1,5 @@
 import React from 'react';
-import { monthNames, weekDays } from './mockData';
+import { monthNames, weekDays } from './constants';
 
 const now = new Date();
 const REAL_TODAY = now.getDate();

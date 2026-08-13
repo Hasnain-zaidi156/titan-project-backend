@@ -1,10 +1,76 @@
-import React from 'react';
-import { studentAttendanceLog, studentAssignmentsLog, studentQuizzesLog } from './mockData';
+import React, { useEffect, useState } from 'react';
+import { API_BASE } from './constants';
 
 const StudentDetailView = ({
   selectedCourse, selectedStudent, setSelectedStudent, setSelectedCourse, setGenderSection,
   studentTab, setStudentTab,
 }) => {
+  // ===== Real attendance / assignments / quizzes for this student, from MongoDB =====
+  const [loading, setLoading] = useState(true);
+  const [attendanceRow, setAttendanceRow] = useState(null); // totals from /api/attendance/by-course
+  const [attendanceHistory, setAttendanceHistory] = useState([]); // [{date, status}]
+  const [studentAssignmentsLog, setStudentAssignmentsLog] = useState([]); // [title, dueDate, status, feedback, tag]
+  const [studentQuizzesLog, setStudentQuizzesLog] = useState([]); // [title, score, totalQ, attempts, date]
+
+  useEffect(() => {
+    let cancelled = false;
+    const rollNumber = selectedStudent?.code;
+    const course = selectedCourse?.title;
+    if (!rollNumber || !course) return;
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [byCourseRes, historyRes, assignmentsRes, quizzesRes] = await Promise.all([
+          fetch(`${API_BASE}/api/attendance/by-course?course=${encodeURIComponent(course)}`),
+          fetch(`${API_BASE}/api/attendance/history/${encodeURIComponent(rollNumber)}`),
+          fetch(`${API_BASE}/api/assignments?course=${encodeURIComponent(course)}`),
+          fetch(`${API_BASE}/api/quizzes?course=${encodeURIComponent(course)}`),
+        ]);
+        const byCourseData = await byCourseRes.json().catch(() => ({ students: [] }));
+        const historyData = await historyRes.json().catch(() => []);
+        const assignmentsData = await assignmentsRes.json().catch(() => []);
+        const quizzesData = await quizzesRes.json().catch(() => []);
+        if (cancelled) return;
+
+        const row = (byCourseData.students || []).find((s) => s.rollNumber === rollNumber) || null;
+        setAttendanceRow(row);
+        setAttendanceHistory(
+          (Array.isArray(historyData) ? historyData : []).map((r) => [
+            r.date,
+            r.status === 'present' ? 'Present' : r.status === 'leave' ? 'Leave' : 'Absent',
+          ])
+        );
+
+        const assignmentRows = (Array.isArray(assignmentsData) ? assignmentsData : []).map((a) => {
+          const sub = (a.submissions || []).find((s) => s.rollNumber === rollNumber);
+          let status = 'Not Submitted';
+          if (sub) {
+            if (sub.approved === true) status = 'Approved';
+            else if (sub.approved === false) status = 'Not Approved';
+            else status = sub.status || 'Submitted';
+          }
+          return [a.title, a.dueDate, status, sub?.feedback || '', null];
+        });
+        setStudentAssignmentsLog(assignmentRows);
+
+        const quizRows = [];
+        (Array.isArray(quizzesData) ? quizzesData : []).forEach((q) => {
+          const result = (q.results || []).find((r) => r.rollNumber === rollNumber);
+          if (result) quizRows.push([q.title, result.score, result.totalQuestions, result.attempts, result.date]);
+        });
+        setStudentQuizzesLog(quizRows);
+      } catch (err) {
+        console.error('Failed to load student detail data:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, [selectedStudent?.code, selectedCourse?.title]);
+
   return (
     <div className="expanded-course-workspace-card animated-fade">
       <div className="breadcrumbs">
@@ -19,8 +85,12 @@ const StudentDetailView = ({
       </div>
 
       {studentTab === 'attendance' && (() => {
-        const totalClasses = 125, present = 111, leave = 5, absent = 9;
-        const attPercent = Math.round((present / totalClasses) * 100);
+        if (loading && !attendanceRow) return <div className="tab-render-container"><p className="muted-italic-text">Loading attendance…</p></div>;
+        const totalClasses = attendanceRow?.totalClasses || 0;
+        const present = attendanceRow?.present || 0;
+        const leave = attendanceRow?.leave || 0;
+        const absent = attendanceRow?.absent || 0;
+        const attPercent = totalClasses > 0 ? Math.round((present / totalClasses) * 100) : 0;
         const isGood = attPercent >= 75;
         return (
           <div className="tab-render-container">
@@ -33,17 +103,28 @@ const StudentDetailView = ({
             <div className="attendance-overview-card">
               <h3>Attendance Overview</h3>
               <div className="overview-progress-rail"><div className="overview-progress-fill" style={{ width: `${attPercent}%`, background: isGood ? '#10b981' : '#ef4444' }}></div></div>
-              {isGood ? <p className="attendance-good-text">Your attendance is good. Keep it up!</p> : <p className="attendance-warning-text">Your attendance is below 75%. Please improve your attendance.</p>}
+              {totalClasses === 0 ? (
+                <p className="muted-italic-text">No attendance marked for this course yet.</p>
+              ) : isGood ? (
+                <p className="attendance-good-text">Your attendance is good. Keep it up!</p>
+              ) : (
+                <p className="attendance-warning-text">Your attendance is below 75%. Please improve your attendance.</p>
+              )}
             </div>
             <div className="attendance-month-table-card">
               <div className="attendance-month-header-row">
-                <h3>Attendance: Jun 2026</h3>
-                <select className="month-select-dropdown" defaultValue="Jun 2026"><option>Jun 2026</option></select>
+                <h3>Recent Attendance</h3>
               </div>
               <div className="table-responsive-wrapper">
                 <table className="client-data-table plain-table">
                   <thead><tr><th>Date</th><th>Status</th></tr></thead>
-                  <tbody>{studentAttendanceLog.map((row, idx) => <tr key={idx}><td>{row[0]}</td><td><span className={row[1] === 'Present' ? 'badge-present-status' : 'badge-notmarked-status'}>{row[1]}</span></td></tr>)}</tbody>
+                  <tbody>
+                    {attendanceHistory.length === 0 ? (
+                      <tr><td colSpan={2} className="muted-italic-text">No records yet.</td></tr>
+                    ) : attendanceHistory.map((row, idx) => (
+                      <tr key={idx}><td>{row[0]}</td><td><span className={row[1] === 'Present' ? 'badge-present-status' : 'badge-notmarked-status'}>{row[1]}</span></td></tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -70,6 +151,9 @@ const StudentDetailView = ({
                 <table className="client-data-table">
                   <thead><tr><th>#</th><th>Title</th><th>Due Date</th><th>Submission</th><th>Feedback</th></tr></thead>
                   <tbody>
+                    {studentAssignmentsLog.length === 0 && (
+                      <tr><td colSpan={5} className="muted-italic-text">{loading ? 'Loading…' : 'No assignments for this course yet.'}</td></tr>
+                    )}
                     {studentAssignmentsLog.map((row, idx) => {
                       const [title, dueDate, submission, feedback, tag] = row;
                       let badgeClass = 'badge-notsubmitted-status';
@@ -101,6 +185,9 @@ const StudentDetailView = ({
               <table className="client-data-table">
                 <thead><tr><th>#</th><th>Quiz Title</th><th>Score</th><th>Total Questions</th><th>Percentage</th><th>Attempts</th><th>Status</th><th>Date</th></tr></thead>
                 <tbody>
+                  {studentQuizzesLog.length === 0 && (
+                    <tr><td colSpan={8} className="muted-italic-text">{loading ? 'Loading…' : 'No quiz attempts yet.'}</td></tr>
+                  )}
                   {studentQuizzesLog.map((row, idx) => {
                     const [title, score, totalQ, attempts, date] = row;
                     const pct = Math.round((score / totalQ) * 100);

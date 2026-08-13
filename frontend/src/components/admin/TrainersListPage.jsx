@@ -5,8 +5,9 @@ import { ToastStack } from "./ToastStack";
 import { useToasts } from "./hooks";
 import { API_URL } from "../../constants/config";
 import { COURSES, CITIES } from "../../constants/studentConstants";
-import { TRAINERS_FULL_LIST, EMPTY_TRAINER_FORM } from "../../constants/trainerConstants";
+import { EMPTY_TRAINER_FORM } from "../../constants/trainerConstants";
 import { TrainerFormModal } from "./TrainerFormModal";
+import { ConfirmPopover } from "./CustomSelect";
 
 export function TrainersListPage() {
   const [trainers, setTrainers] = useState([]);
@@ -17,37 +18,31 @@ export function TrainersListPage() {
   const [formModal, setFormModal] = useState(null);
   const [formSaving, setFormSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [confirmFor, setConfirmFor] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const { toasts, showToast } = useToasts();
 
   // ---- Trainers MongoDB (backend API) se load karo mount par ----
+  const loadTrainers = async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const response = await fetch(`${API_URL}/api/trainers`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Failed to load trainers");
+      setTrainers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to load trainers from API", error);
+      setTrainers([]);
+      setLoadError(error.message || "Could not reach the server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let cancelled = false;
-
-    const loadTrainers = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(`${API_URL}/api/trainers`);
-        const data = await response.json();
-        if (!cancelled) {
-          if (response.ok && Array.isArray(data) && data.length > 0) {
-            setTrainers(data);
-          } else {
-            // DB reachable but empty, ya unreachable -> demo rows fallback
-            setTrainers(TRAINERS_FULL_LIST);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load trainers from API", error);
-        if (!cancelled) setTrainers(TRAINERS_FULL_LIST);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
     loadTrainers();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const filtered = trainers.filter((t) => {
@@ -112,6 +107,26 @@ export function TrainersListPage() {
     }
   };
 
+  // ---- Delete trainer: DELETE from MongoDB cluster via backend API ----
+  const handleDelete = async (id) => {
+    setDeletingId(id);
+    try {
+      const response = await fetch(`${API_URL}/api/trainers/${id}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to delete trainer");
+      }
+      setTrainers((prev) => prev.filter((t) => t.id !== id));
+      setConfirmFor(null);
+      showToast("Trainer deleted");
+    } catch (error) {
+      console.error("Delete trainer error:", error);
+      showToast(error.message || "Could not delete trainer", "error");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="ta-students-page">
       <div className="ta-students-toolbar">
@@ -155,8 +170,18 @@ export function TrainersListPage() {
           <tbody>
             {loading ? (
               <tr><td colSpan={8}><div className="ta-empty-state"><p>Loading trainers…</p></div></td></tr>
+            ) : loadError ? (
+              <tr>
+                <td colSpan={8}>
+                  <div className="ta-empty-state">
+                    <Icon path={ICONS.inbox} size={42} />
+                    <p>{loadError}</p>
+                    <button className="ta-btn-outline" onClick={loadTrainers}>Retry</button>
+                  </div>
+                </td>
+              </tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8}><div className="ta-empty-state"><Icon path={ICONS.inbox} size={42} /><p>No data</p></div></td></tr>
+              <tr><td colSpan={8}><div className="ta-empty-state"><Icon path={ICONS.inbox} size={42} /><p>No trainers yet</p></div></td></tr>
             ) : (
               filtered.map((t) => (
                 <tr key={t.id}>
@@ -168,24 +193,43 @@ export function TrainersListPage() {
                   <td>{(t.cities || []).join(", ")}</td>
                   <td><span className={`ta-badge ${t.status === "Active" ? "ta-badge-blue" : "ta-badge-gray"}`}>{t.status}</span></td>
                   <td>
-                    <button
-                      className="ta-icon-action"
-                      title="Edit"
-                      aria-label={`Edit ${t.name}`}
-                      onClick={() => {
-                        setFormError("");
-                        setFormModal({
-                          mode: "edit",
-                          trainer: {
-                            ...t,
-                            courses: t.courses?.[0] || COURSES[0],
-                            cities: t.cities?.[0] || CITIES[0],
-                          },
-                        });
-                      }}
-                    >
-                      <Icon path={ICONS.pencil} size={15} />
-                    </button>
+                    <div className="ta-action-row">
+                      <button
+                        className="ta-icon-action"
+                        title="Edit"
+                        aria-label={`Edit ${t.name}`}
+                        onClick={() => {
+                          setFormError("");
+                          setFormModal({
+                            mode: "edit",
+                            trainer: {
+                              ...t,
+                              courses: t.courses?.[0] || COURSES[0],
+                              cities: t.cities?.[0] || CITIES[0],
+                            },
+                          });
+                        }}
+                      >
+                        <Icon path={ICONS.pencil} size={15} />
+                      </button>
+                      <div className="ta-action-popover-anchor">
+                        <button
+                          className="ta-icon-action ta-icon-action-danger"
+                          title="Delete"
+                          aria-label={`Delete ${t.name}`}
+                          onClick={() => setConfirmFor(t.id)}
+                        >
+                          <Icon path={ICONS.trash} size={15} />
+                        </button>
+                        {confirmFor === t.id && (
+                          <ConfirmPopover
+                            message={deletingId === t.id ? "Deleting…" : `Delete ${t.name}?`}
+                            onCancel={() => setConfirmFor(null)}
+                            onConfirm={() => handleDelete(t.id)}
+                          />
+                        )}
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ))

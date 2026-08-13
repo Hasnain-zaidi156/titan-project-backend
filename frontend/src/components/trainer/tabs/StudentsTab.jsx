@@ -1,5 +1,4 @@
 import React from 'react';
-import { studentsData, TOTAL_STUDENT_RECORDS, PAGE_SIZE } from '../mockData';
 
 const StudentsTab = ({
   liveStudents, liveStudentsLoading,

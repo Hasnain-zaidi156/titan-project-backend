@@ -1,14 +1,23 @@
 import React from 'react';
-import { courses as allMockCourses } from './mockData';
 
 const CoursesHome = ({
-  courses, // trainer ke assigned courses (Dashboard se aata hai); na aaye to sab mock courses dikhte hain
+  courses, // trainer ke live-computed courses (Dashboard se real student data se banti hain)
+  coursesLoading,
   genderSection, setGenderSection,
   courseSearchQuery, setCourseSearchQuery,
   setSelectedCourse, setActiveCourseTab, setStudentsPage,
   setSelectedAssignment, setSelectedQuiz,
 }) => {
-  const courseList = courses || allMockCourses;
+  const courseList = courses || [];
+
+  if (coursesLoading) {
+    return (
+      <>
+        <div className="dashboard-title-row"><h1>Dashboard</h1></div>
+        <p className="muted-italic-text">Loading your courses…</p>
+      </>
+    );
+  }
   const maleCourses = courseList.filter(c => c.type.includes('Male'));
   const femaleCourses = courseList.filter(c => c.type.includes('Female'));
   const maleEnrolledTotal = maleCourses.reduce((sum, c) => sum + c.enrolled, 0);

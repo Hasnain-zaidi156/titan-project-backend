@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from "react"
 import Dashboard from "./Dashboard"
-import { API_BASE, TITAN_LOGO } from "./mockData"
+import { API_BASE, TITAN_LOGO } from "./constants"
 
 const STORAGE_KEY = "titan-trainer-session"
 

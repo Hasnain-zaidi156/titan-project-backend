@@ -1,5 +1,5 @@
 import React from 'react';
-import { TITAN_LOGO } from './mockData';
+import { TITAN_LOGO } from './constants';
 
 const Sidebar = ({
   isSidebarOpen, toggleSidebar, currentMenu, goTo,

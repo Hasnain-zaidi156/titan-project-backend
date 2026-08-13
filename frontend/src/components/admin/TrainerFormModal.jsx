@@ -16,7 +16,7 @@ export function TrainerFormModal({ title, mode, initialValues, onClose, onSave, 
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.email.trim() || !form.employeeId.trim()) return;
+    if (!form.name.trim() || !form.email.trim() || (mode === "edit" && !form.employeeId.trim())) return;
 
     if (mode === "add" && (!form.password || form.password.length < 6)) {
       setPasswordError("Password required hai (kam se kam 6 characters) — yehi trainer ka login password banega.");
@@ -71,8 +71,17 @@ export function TrainerFormModal({ title, mode, initialValues, onClose, onSave, 
             {passwordError && <p className="ta-field-error-msg">{passwordError}</p>}
           </div>
           <div className="ta-filter-field">
-            <label>Employee ID (Roll No) *</label>
-            <input className="ta-form-input" required value={form.employeeId} onChange={(e) => set("employeeId", e.target.value)} />
+            <label>Employee ID (Roll No){mode === "edit" ? " *" : ""}</label>
+            {mode === "add" ? (
+              <>
+                <input className="ta-form-input" value="Auto-assigned on save (starts at 500)" disabled />
+                <p className="ta-field-hint" style={{ fontSize: 11, color: "var(--ta-text-muted)", marginTop: 4 }}>
+                  Employee ID system khud generate karega — 500 se shuru hoke agla available number.
+                </p>
+              </>
+            ) : (
+              <input className="ta-form-input" required value={form.employeeId} onChange={(e) => set("employeeId", e.target.value)} />
+            )}
           </div>
           <div className="ta-filter-field">
             <label>Course</label>

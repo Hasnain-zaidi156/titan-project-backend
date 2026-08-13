@@ -27,7 +27,7 @@ const CourseDetailView = ({
   displayedQuizzes, quizzesLoading, openNewQuizModal, selectedQuiz,
 
   // progress tab
-  showComparison, setShowComparison,
+  showComparison, setShowComparison, trainer,
 }) => {
   const switchTab = (tab) => {
     setActiveCourseTab(tab);
@@ -99,7 +99,7 @@ const CourseDetailView = ({
         )}
 
         {activeCourseTab === 'progress' && (
-          <ProgressTab showComparison={showComparison} setShowComparison={setShowComparison} />
+          <ProgressTab showComparison={showComparison} setShowComparison={setShowComparison} course={selectedCourse} trainer={trainer} />
         )}
       </div>
     </div>

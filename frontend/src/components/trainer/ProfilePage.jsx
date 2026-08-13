@@ -1,5 +1,5 @@
 import React from 'react';
-import { PROFILE_BG_IMG } from './mockData';
+import { PROFILE_BG_IMG } from './constants';
 
 const ProfilePage = ({
   trainerProfile, profilePhoto,

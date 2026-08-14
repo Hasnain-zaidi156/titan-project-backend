@@ -1730,8 +1730,6 @@
 // startServer();
 
 
-
-
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -2296,6 +2294,31 @@ async function generateUniqueRollNumber() {
     return String(next);
 }
 
+// ===== FIX (2026-08-14): admissionNo used to be generated from
+// Student.countDocuments(), e.g. `ADM${900000 + count + 1}`. That breaks
+// as soon as the count doesn't match the highest admissionNo already in
+// the DB (a student got deleted, or one was inserted manually/via seed) —
+// the generated ADM number collides with an existing one, MongoDB throws
+// a duplicate-key (11000) error on the unique `admissionNo` index, and
+// since the catch block below only special-cased rollNumber duplicates,
+// it fell through to a generic 500 "Failed to save student". This was
+// almost certainly the cause of "student add nahi ho raha, 500 error".
+// Now we compute the next admissionNo the same safe way as roll numbers:
+// find the current max, then walk forward until a free one is found.
+async function generateUniqueAdmissionNo() {
+    const result = await Student.aggregate([
+        { $addFields: { admNumInt: { $convert: { input: { $substrCP: ['$admissionNo', 3, 20] }, to: 'int', onError: 0, onNull: 0 } } } },
+        { $sort: { admNumInt: -1 } },
+        { $limit: 1 },
+    ]);
+    const ADM_START = 900001;
+    let next = result.length && result[0].admNumInt >= ADM_START ? result[0].admNumInt + 1 : ADM_START;
+    while (await Student.exists({ admissionNo: `ADM${next}` })) {
+        next += 1;
+    }
+    return `ADM${next}`;
+}
+
 async function generateUniqueEmployeeId() {
     const result = await Trainer.aggregate([
         { $addFields: { empIdInt: { $convert: { input: '$employeeId', to: 'int', onError: 0, onNull: 0 } } } },
@@ -2398,12 +2421,7 @@ app.post('/api/seed-gd-students', async(req, res) => {
             const exists = await Student.findOne({ cnic: s.cnic });
             if (exists) { skipped++; continue; }
             const rollNumber = await generateUniqueRollNumber();
-            const count = await Student.countDocuments();
-            let admissionNo = `ADM${900000 + count + 1}`;
-            // Ensure admissionNo is unique
-            while (await Student.exists({ admissionNo })) {
-                admissionNo = `ADM${parseInt(admissionNo.replace('ADM', '')) + 1}`;
-            }
+            const admissionNo = await generateUniqueAdmissionNo();
             await new Student({...s, rollNumber, admissionNo }).save();
             added++;
         }
@@ -2432,8 +2450,10 @@ app.post('/api/students', async(req, res) => {
         const studentData = req.body;
 
         if (isDbConnected()) {
-            const count = await Student.countDocuments();
-            const admissionNo = studentData.admissionNo || `ADM${900000 + count + 1}`;
+            // FIX: pehle count-based admissionNo ban raha tha (ADM${900000+count+1}),
+            // jo delete/manual-insert ke baad duplicate ban sakta tha aur 500 deta tha.
+            // Ab safe generator use karta hai jo existing max dekh kar unique number deta hai.
+            const admissionNo = (studentData.admissionNo || '').trim() || (await generateUniqueAdmissionNo());
             const rollNumber = (studentData.rollNumber || '').trim() || (await generateUniqueRollNumber());
 
             const newStudent = new Student({
@@ -2464,8 +2484,23 @@ app.post('/api/students', async(req, res) => {
 
         res.status(503).json({ message: 'Database connection unavailable' });
     } catch (error) {
-        if (error.code === 11000 && error.keyPattern && error.keyPattern.rollNumber) {
-            return res.status(409).json({ message: 'Roll number already exists. Please choose another one.' });
+        // FIX: pehle sirf rollNumber duplicate handle hota tha. admissionNo
+        // duplicate (ya koi aur unique field) is condition se miss ho kar
+        // seedha generic 500 me gir jata tha. Ab dono explicitly handle hain,
+        // aur Mongoose ValidationError (missing required field jaisे
+        // studentName/fatherName/cnic/phone) ko bhi clear 400 message milta hai.
+        if (error.code === 11000 && error.keyPattern) {
+            if (error.keyPattern.rollNumber) {
+                return res.status(409).json({ message: 'Roll number already exists. Please choose another one.' });
+            }
+            if (error.keyPattern.admissionNo) {
+                return res.status(409).json({ message: 'Admission number already exists. Please try again.' });
+            }
+            return res.status(409).json({ message: 'Duplicate value for a unique field.', detail: error.keyPattern });
+        }
+        if (error.name === 'ValidationError') {
+            const missing = Object.keys(error.errors || {}).join(', ');
+            return res.status(400).json({ message: `Missing/invalid required field(s): ${missing}`, error: error.message });
         }
         console.error('Save student error:', error);
         res.status(500).json({ message: 'Failed to save student', error: error.message });
@@ -3371,8 +3406,7 @@ app.post('/api/enroll', async(req, res) => {
             return res.status(409).json({ message: 'An application with this CNIC already exists. Try logging in instead.' });
         }
 
-        const count = await Student.countDocuments();
-        const admissionNo = `ADM${900000 + count + 1}`;
+        const admissionNo = await generateUniqueAdmissionNo();
         const rollNumber = await generateUniqueRollNumber();
         const passwordHash = await bcrypt.hash(String(password), 10);
 

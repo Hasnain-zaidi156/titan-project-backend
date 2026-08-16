@@ -18,7 +18,11 @@ export function StudentsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  // FIX: pehle default 10/page tha aur "10 se zyada" wale students agle
+  // page par chale jate the — pagination controls chhote/neeche the isliye
+  // lagta tha students "ghayab" ho gaye. Ab default 25/page hai aur "All"
+  // option bhi hai taake ek click mein poori list dikh sake.
+  const [pageSize, setPageSize] = useState(25);
   const { toasts, showToast } = useToasts();
 
   const [formModal, setFormModal] = useState(null);
@@ -90,7 +94,7 @@ export function StudentsPage() {
   const safePage = Math.min(page, totalPages);
   const startIdx = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endIdx = Math.min(safePage * pageSize, totalItems);
-  const pageRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pageRows = pageSize >= totalItems ? filteredRows : filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const runSearch = () => {
     setSearchQuery(searchInput);
@@ -430,6 +434,8 @@ export function StudentsPage() {
               <option value={10}>10 / page</option>
               <option value={25}>25 / page</option>
               <option value={50}>50 / page</option>
+              <option value={100}>100 / page</option>
+              <option value={100000}>Show All</option>
             </select>
           </div>
         </div>

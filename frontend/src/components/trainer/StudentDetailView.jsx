@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { API_BASE } from './constants';
 
 const StudentDetailView = ({
-  selectedCourse, selectedStudent, setSelectedStudent, setSelectedCourse, setGenderSection,
+  selectedCourse, selectedStudent, setSelectedStudent, setSelectedCourse,
   studentTab, setStudentTab,
 }) => {
   // ===== Real attendance / assignments / quizzes for this student, from MongoDB =====
@@ -74,7 +74,7 @@ const StudentDetailView = ({
   return (
     <div className="expanded-course-workspace-card animated-fade">
       <div className="breadcrumbs">
-        <span className="breadcrumb-nav-link" onClick={() => { setSelectedCourse(null); setSelectedStudent(null); setGenderSection(null); }}>Dashboard</span> &gt;
+        <span className="breadcrumb-nav-link" onClick={() => { setSelectedCourse(null); setSelectedStudent(null); }}>Dashboard</span> &gt;
         <span className="breadcrumb-nav-link" onClick={() => setSelectedStudent(null)}> {selectedCourse.title}</span> &gt;
         <span className="current-crumb"> {selectedStudent.name}</span>
       </div>

@@ -145,12 +145,11 @@ export function StudentFormModal({ title, initialValues, onClose, onSave, saving
             {errors.cnic && <p className="ta-field-error-msg">{errors.cnic}</p>}
           </div>
           <div className="ta-filter-field">
-            <label>Date of Birth *</label>
+            <label>Date of Birth</label>
             <div className="ta-date-range-wrap">
               <input
                 type="date"
                 className={errors.dob ? "ta-form-input-error" : ""}
-                required
                 value={form.dob}
                 onChange={(e) => set("dob", e.target.value)}
                 aria-label="Date of birth"
@@ -158,7 +157,7 @@ export function StudentFormModal({ title, initialValues, onClose, onSave, saving
               <Icon path={ICONS.calendar} size={15} />
             </div>
             <p className="ta-field-hint" style={{ fontSize: 11, color: "var(--ta-text-muted)", marginTop: 4 }}>
-              Student "Create Password" screen par CNIC + DOB se identity verify hoti hai — is field ke bina wo login nahi bana sakega.
+              Student "Create Password" screen par CNIC + DOB se identity verify hoti hai — optional hai, lekin is field ke bina wo login nahi bana sakega.
             </p>
             {errors.dob && <p className="ta-field-error-msg">{errors.dob}</p>}
           </div>

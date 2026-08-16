@@ -41,7 +41,7 @@ function buildQrPayload(type, person) {
   });
 }
 
-function CardShell({ innerRef, children }) {
+function CardShell({ innerRef, children, gradId = "idcard-gold-grad" }) {
   return (
     <div
       ref={innerRef}
@@ -56,13 +56,36 @@ function CardShell({ innerRef, children }) {
         fontFamily: "'Segoe UI', Arial, sans-serif",
       }}
     >
-      {/* top navy sweep */}
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 90, background: NAVY, clipPath: "polygon(0 0, 100% 0, 100% 45%, 0 100%)" }} />
-      {/* gold accent line under header */}
-      <div style={{ position: "absolute", top: 92, left: 24, right: 24, height: 3, background: GOLD, borderRadius: 2 }} />
-      {/* bottom gold sweep */}
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 46, background: `linear-gradient(90deg, ${GOLD}, #e6c877, ${GOLD})`, clipPath: "polygon(0 55%, 100% 0, 100% 100%, 0% 100%)" }} />
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 36, background: NAVY, clipPath: "polygon(0 60%, 100% 15%, 100% 100%, 0% 100%)" }} />
+      {/* IMPORTANT: pehle ye 3 decorative shapes CSS clip-path (polygon())
+          se banti thi. html2canvas clip-path ko reliably support nahi
+          karta — canvas snapshot lete waqt clip-path ignore ho jata tha
+          aur ye teeno divs APNI FULL RECTANGLE shape mein render ho jate
+          the (bina slant/cut ke), jo TITAN logo/header aur neeche ke
+          fields ke UPAR se poora block kar dete the. Yehi wo wajah thi
+          jiski waja se "Download PDF" karne ke baad card ka design toota
+          hua / squished dikhta tha (header ghayab, back card ka content
+          upar-neeche gadmad). Fix: same shapes ab SVG <polygon> se banayi
+          hain — SVG html2canvas mein hamesha sahi render hota hai. */}
+      <svg
+        width={340}
+        height={460}
+        viewBox="0 0 340 460"
+        style={{ position: "absolute", top: 0, left: 0, zIndex: 0 }}
+      >
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={GOLD} />
+            <stop offset="50%" stopColor="#e6c877" />
+            <stop offset="100%" stopColor={GOLD} />
+          </linearGradient>
+        </defs>
+        {/* top navy sweep */}
+        <polygon points="0,0 340,0 340,40.5 0,90" fill={NAVY} />
+        {/* bottom gold sweep */}
+        <polygon points="0,439.3 340,414 340,460 0,460" fill={`url(#${gradId})`} />
+        {/* bottom navy sweep */}
+        <polygon points="0,445.6 340,429.4 340,460 0,460" fill={NAVY} />
+      </svg>
       {/* IMPORTANT: ye wrapper "position: relative" hai isliye ye baaki
           absolute decorative divs ke UPAR paint hota hai (CSS stacking
           rule: positioned elements DOM order se stack hote hain, in-flow
@@ -105,9 +128,9 @@ function FrontCard({ innerRef, type, person }) {
     : [["NAME", name], ["EMPLOYEE NO", person.employeeId], ["VALID UNTIL", validUntilLabel(person.createdAt)]];
 
   return (
-    <CardShell innerRef={innerRef}>
+    <CardShell innerRef={innerRef} gradId="idcard-gold-grad-front">
       <Header />
-      <div style={{ textAlign: "center", marginTop: 22 }}>
+      <div style={{ textAlign: "center", marginTop: 26 }}>
         <span style={{ color: NAVY, fontWeight: 800, fontSize: 15, letterSpacing: 1.5, borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>{title}</span>
       </div>
       <div style={{ margin: "16px auto 10px", width: 148, height: 168, border: `2px solid ${NAVY}`, borderRadius: 10, overflow: "hidden", background: "#eef1f8", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -118,7 +141,7 @@ function FrontCard({ innerRef, type, person }) {
       <div style={{ padding: "4px 22px", fontSize: 12.5, color: "#1c2a52" }}>
         {fields.map(([label, value]) => (
           <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <strong>{label}:</strong><span style={{ borderBottom: "1px solid #b9c0d6", flex: 1, marginLeft: 8, textAlign: "right" }}>{value || "—"}</span>
+            <strong>{label}:</strong><span style={{ borderBottom: "1px solid #b9c0d6", flex: 1, marginLeft: 8, textAlign: "center" }}>{value || "—"}</span>
           </div>
         ))}
       </div>
@@ -146,7 +169,7 @@ function BackCard({ innerRef, type, person, qrDataUrl }) {
       ];
 
   return (
-    <CardShell innerRef={innerRef}>
+    <CardShell innerRef={innerRef} gradId="idcard-gold-grad-back">
       <Header />
       <div style={{ padding: "18px 20px 0", fontSize: 12, color: "#1c2a52" }}>
         {rows.map(([icon, label, value]) => (
@@ -154,7 +177,7 @@ function BackCard({ innerRef, type, person, qrDataUrl }) {
             <IconBadge path={icon} />
             <strong style={{ width: 92, flexShrink: 0 }}>{label}</strong>
             <span>:</span>
-            <span style={{ borderBottom: "1px solid #b9c0d6", flex: 1, marginLeft: 4, paddingBottom: 2, wordBreak: "break-word" }}>{value || "—"}</span>
+            <span style={{ borderBottom: "1px solid #b9c0d6", flex: 1, marginLeft: 4, paddingBottom: 2, textAlign: "center", wordBreak: "break-word" }}>{value || "—"}</span>
           </div>
         ))}
       </div>
@@ -182,12 +205,31 @@ export function IDCardModal({ type, person, onClose }) {
       .catch((err) => console.error("QR generate failed:", err));
   }, [type, person]);
 
+  // Photo/logo jaisi <img> tags network se load hoti hain — agar
+  // html2canvas capture inke poora load hone SE PEHLE chal jaye to wo
+  // image tooti hui / khali kheenchta hai. Isliye capture se pehle sab
+  // images ka load hona confirm karte hain.
+  const waitForImages = (el) => {
+    const imgs = Array.from(el.querySelectorAll("img"));
+    return Promise.all(
+      imgs.map((img) =>
+        img.complete
+          ? Promise.resolve()
+          : new Promise((resolve) => {
+              img.onload = resolve;
+              img.onerror = resolve;
+            })
+      )
+    );
+  };
+
   // Front + Back dono side ek hi PDF page par (upar-neeche), ek hi button —
   // design bilkul wahi rehta hai.
   const downloadPDF = async () => {
     if (!frontRef.current || !backRef.current) return;
     setDownloading(true);
     try {
+      await Promise.all([waitForImages(frontRef.current), waitForImages(backRef.current)]);
       const [frontCanvas, backCanvas] = await Promise.all([
         html2canvas(frontRef.current, { scale: 3, backgroundColor: "#ffffff", useCORS: true }),
         html2canvas(backRef.current, { scale: 3, backgroundColor: "#ffffff", useCORS: true }),
@@ -208,29 +250,96 @@ export function IDCardModal({ type, person, onClose }) {
   const idValue = type === "student" ? person.rollNumber : person.employeeId;
   const displayName = type === "student" ? person.studentName : person.name;
 
+  // IMPORTANT: is modal ka bahar wala frame (overlay/box/header/footer/
+  // buttons) pehle .ta-modal-overlay, .ta-modal, .ta-btn-primary jaisi
+  // classes use karta tha — ye sirf SuperAdmin.css mein defined hain, jo
+  // Admin portal ke components load karte hain. Student aur Trainer
+  // dashboard ye CSS file import hi nahi karte, isliye wahan se card khulne
+  // par sirf plain/unstyled box dikhta tha (koi dark overlay, rounding,
+  // ya styled buttons nahi). Fix: poora modal chrome ab inline styles se
+  // banaya hai — isliye kisi bhi portal (Admin/Student/Trainer) se khule,
+  // hamesha sahi design dikhega, kisi bahar ki CSS file par depend nahi.
   return (
-    <div className="ta-modal-overlay" onClick={onClose}>
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(9, 24, 52, 0.55)",
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 2000,
+        padding: 20,
+      }}
+    >
       <div
-        className="ta-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="ID Card"
-        style={{ maxWidth: 760, width: "auto" }}
+        style={{
+          background: "#fff",
+          borderRadius: 14,
+          borderTop: `4px solid ${GOLD}`,
+          width: "100%",
+          maxWidth: 760,
+          maxHeight: "88vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 20px 60px rgba(9,24,52,0.35)",
+          fontFamily: "'Segoe UI', Arial, sans-serif",
+        }}
       >
-        <div className="ta-modal-header">
-          <h3>{type === "student" ? "Student" : "Trainer"} ID Card — {displayName}</h3>
-          <button className="ta-modal-close" onClick={onClose} aria-label="Close">×</button>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid #e5e8f0" }}>
+          <h3 style={{ margin: 0, color: NAVY, fontSize: 17, fontWeight: 800 }}>{type === "student" ? "Student" : "Trainer"} ID Card — {displayName}</h3>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: 22, lineHeight: 1, padding: 4 }}
+          >
+            ×
+          </button>
         </div>
-        <div className="ta-modal-body" style={{ display: "flex", gap: 24, flexWrap: "wrap", justifyContent: "center", padding: 20 }}>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", justifyContent: "center", padding: 20, overflowY: "auto" }}>
           <FrontCard innerRef={frontRef} type={type} person={person} />
           <BackCard innerRef={backRef} type={type} person={person} qrDataUrl={qrDataUrl} />
         </div>
-        <div className="ta-modal-footer">
-          <button className="ta-btn-primary" disabled={downloading} onClick={downloadPDF}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "16px 24px", borderTop: "1px solid #e5e8f0" }}>
+          <button
+            disabled={downloading}
+            onClick={downloadPDF}
+            style={{
+              background: `linear-gradient(180deg, #2f4f9e, ${NAVY})`,
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 16px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: downloading ? "not-allowed" : "pointer",
+              opacity: downloading ? 0.6 : 1,
+            }}
+          >
             {downloading ? "Preparing…" : "Download Card (PDF)"}
           </button>
-          <button className="ta-btn-outline" onClick={onClose}>Close</button>
+          <button
+            onClick={onClose}
+            style={{
+              background: "#fff",
+              color: "#1c2a52",
+              border: "1px solid #d8dce5",
+              borderRadius: 8,
+              padding: "10px 16px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>

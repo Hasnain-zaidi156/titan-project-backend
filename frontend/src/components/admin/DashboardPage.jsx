@@ -18,6 +18,16 @@ export function DashboardPage({ user }) {
   });
   const [statsLoading, setStatsLoading] = useState(true);
 
+  // Admission open/close — controls whether the public "New Admission"
+  // form (StudentAuth) accepts applications. Super Admin toggles it here;
+  // Sub Admin sees it read-only.
+
+
+  const [admissionsOpen, setAdmissionsOpen] = useState(true);
+  const [admissionLoading, setAdmissionLoading] = useState(true);
+  const [admissionSaving, setAdmissionSaving] = useState(false);
+  const canManageAdmissions = user?.role === "Super Admin";
+
   useEffect(() => {
     const loadStats = async () => {
       try {
@@ -38,8 +48,41 @@ export function DashboardPage({ user }) {
       }
     };
 
+    const loadAdmissionStatus = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/admission-status`, { cache: "no-store" });
+        const data = await response.json();
+        if (response.ok) setAdmissionsOpen(data.admissionsOpen !== false);
+      } catch (error) {
+        console.error("Failed to load admission status", error);
+      } finally {
+        setAdmissionLoading(false);
+      }
+    };
+
     loadStats();
+    loadAdmissionStatus();
   }, []);
+
+  const toggleAdmissions = async () => {
+    if (!canManageAdmissions || admissionSaving) return;
+    const next = !admissionsOpen;
+    setAdmissionSaving(true);
+    try {
+      const response = await fetch(`${API_URL}/api/admission-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admissionsOpen: next }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Failed to update");
+      setAdmissionsOpen(data.admissionsOpen);
+    } catch (error) {
+      console.error("Failed to update admission status", error);
+    } finally {
+      setAdmissionSaving(false);
+    }
+  };
 
   return (
     <>
@@ -67,6 +110,38 @@ export function DashboardPage({ user }) {
             <p className="ta-stat-label">{card.label}</p>
           </div>
         ))}
+      </div>
+
+      <div className="ta-panel">
+        <h3>Admissions</h3>
+        <p>
+          Control whether the public "New Admission" form on the portal is
+          accepting new applications right now.
+        </p>
+        <div className="ta-panel-divider" />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <span>
+            Admissions are currently{" "}
+            <strong style={{ color: admissionLoading ? "inherit" : admissionsOpen ? "#16a34a" : "#dc2626" }}>
+              {admissionLoading ? "loading…" : admissionsOpen ? "OPEN" : "CLOSED"}
+            </strong>
+          </span>
+          <button
+            type="button"
+            className="ta-btn-primary"
+            disabled={!canManageAdmissions || admissionLoading || admissionSaving}
+            onClick={toggleAdmissions}
+            title={!canManageAdmissions ? "Only Super Admin can change this" : undefined}
+            style={admissionsOpen ? { background: "#dc2626", borderColor: "#dc2626" } : { background: "#16a34a", borderColor: "#16a34a" }}
+          >
+            {admissionSaving ? "Saving…" : admissionsOpen ? "Close Admissions" : "Open Admissions"}
+          </button>
+        </div>
+        {!canManageAdmissions && (
+          <p style={{ marginTop: 8, fontSize: "0.8rem", opacity: 0.7 }}>
+            Only Super Admin can open or close admissions.
+          </p>
+        )}
       </div>
 
       <div className="ta-panel">

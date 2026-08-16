@@ -12,6 +12,7 @@ import StudentDetailView from './StudentDetailView';
 import CourseDetailView from './CourseDetailView';
 import NewAssignmentModal from './NewAssignmentModal';
 import NewQuizModal from './NewQuizModal';
+import { IDCardModal } from '../admin/IDCardModal';
 
 const getTrainerAvatar = (name, photo) => {
   if (photo && photo.trim()) return photo;
@@ -39,44 +40,96 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
   const [myCourses, setMyCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
 
+  // FIX: pehle trainer record sirf login ke waqt App.jsx session mein set
+  // hoke localStorage mein cache ho jata tha, aur page refresh par wahi
+  // purana cached data dobara load hota tha — agar admin ne trainer ke
+  // assigned days/schedule (slotSchedule) change kiye hon to refresh karne
+  // par bhi purane hi din dikhte the. Ab yahan mount hote hi (refresh ke
+  // baad bhi) aur phir har 15s mein backend se latest trainer record laa
+  // kar App-level session (onUpdateUser) khamoshi se sync karte hain.
+  useEffect(() => {
+    if (!trainer?.employeeId || !onUpdateUser) return;
+    let cancelled = false;
+
+    const refreshTrainer = () => {
+      fetch(`${API_BASE}/api/trainers`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((list) => {
+          if (cancelled) return;
+          const fresh = (Array.isArray(list) ? list : []).find((t) => t.employeeId === trainer.employeeId);
+          if (fresh) onUpdateUser(fresh);
+        })
+        .catch((err) => console.error('Failed to refresh trainer record:', err));
+    };
+
+    refreshTrainer();
+    const syncInterval = setInterval(refreshTrainer, 15000);
+    return () => { cancelled = true; clearInterval(syncInterval); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trainer?.employeeId]);
+
   useEffect(() => {
     let cancelled = false;
-    setCoursesLoading(true);
-    fetch(`${API_BASE}/api/students`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        const allStudents = Array.isArray(data) ? data : [];
-        const relevant = trainerCourseTitles.length > 0
-          ? allStudents.filter((s) => trainerCourseTitles.includes(s.course))
-          : allStudents;
 
-        const groups = new Map();
-        relevant.forEach((s) => {
-          const key = `${s.course}||${s.campus}||${s.batch}||${s.gender}`;
-          if (!groups.has(key)) {
-            groups.set(key, {
-              id: key,
-              title: s.course || 'Untitled Course',
-              type: `LAB | ${s.gender || 'Mixed'}`,
-              campus: s.campus || '—',
-              batch: s.batch || '—',
-              schedule: s.timing || trainer?.slotSchedule || '—',
-              startedOn: s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
-              progress: 0,
-              enrolled: 0,
-            });
-          }
-          groups.get(key).enrolled += 1;
-        });
+    const loadCourses = (showSpinner) => {
+      if (showSpinner) setCoursesLoading(true);
+      fetch(`${API_BASE}/api/students`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return;
+          const allStudents = Array.isArray(data) ? data : [];
+          const relevant = trainerCourseTitles.length > 0
+            ? allStudents.filter((s) => trainerCourseTitles.includes(s.course))
+            : allStudents;
 
-        const list = [...groups.values()].map((c, idx) => ({ ...c, ...CARD_PALETTE[idx % CARD_PALETTE.length] }));
-        setMyCourses(list);
-      })
-      .catch((err) => { console.error('Failed to load courses:', err); if (!cancelled) setMyCourses([]); })
-      .finally(() => { if (!cancelled) setCoursesLoading(false); });
-    return () => { cancelled = true; };
-  }, [trainer?.employeeId]);
+          // Gender se split nahi karte — sirf course+campus+batch ke hisaab se
+          // group karte hain taake ek hi card mein us batch ke SAARE students
+          // (Male/Female sab) aa jayein.
+          const groups = new Map();
+          relevant.forEach((s) => {
+            const key = `${s.course}||${s.campus}||${s.batch}`;
+            if (!groups.has(key)) {
+              groups.set(key, {
+                id: key,
+                title: s.course || 'Untitled Course',
+                type: 'All Students',
+                campus: s.campus || '—',
+                batch: s.batch || '—',
+                schedule: s.timing || trainer?.slotSchedule || '—',
+                startedOn: s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
+                progress: 0,
+                enrolled: 0,
+              });
+            }
+            groups.get(key).enrolled += 1;
+          });
+
+          const list = [...groups.values()].map((c, idx) => ({ ...c, ...CARD_PALETTE[idx % CARD_PALETTE.length] }));
+          setMyCourses(list);
+        })
+        .catch((err) => { console.error('Failed to load courses:', err); if (!cancelled && showSpinner) setMyCourses([]); })
+        .finally(() => { if (!cancelled && showSpinner) setCoursesLoading(false); });
+    };
+
+    loadCourses(true);
+    // Admin jab bhi student add/move/edit kare (course/campus/batch), yahan
+    // har 15s mein khamoshi se (bina spinner ke) refresh ho jata hai —
+    // reload ki zaroorat nahi.
+    const interval = setInterval(() => loadCourses(false), 15000);
+    return () => { cancelled = true; clearInterval(interval); };
+    // FIX: pehle dependency list mein `trainer?.courses` (poora array) tha —
+    // refreshTrainer() har 15s mein backend se naya trainer record laata hai,
+    // jiska "courses" array HAMESHA naya reference hota hai (chahe values
+    // same hi kyun na hon, JSON parse se naya array banta hai). Isi wajah se
+    // ye poora effect har 15s mein dobara chalta tha aur purani /api/students
+    // request ko "cancelled" kar deta tha — agar wo request 15s se zyada le
+    // le (slow/cold-start backend), to woh COMPLETE hone se pehle hi cancel
+    // ho jati thi, isliye setCoursesLoading(false) kabhi call hi nahi hota
+    // tha aur loading spinner hamesha ghoomta rehta tha. Ab array reference
+    // ki jagah uski STRING value use kar rahe hain, jo tabhi badlegi jab
+    // courses waqai change hon — is se effect baar baar restart nahi hoga.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trainer?.employeeId, trainerCourseTitles.join(','), trainer?.slotSchedule]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentMenu, setCurrentMenu] = useState('dashboard');
@@ -117,8 +170,6 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
     return `${yyyy}-${mm}-${dd}`;
   });
 
-  // Gender section
-  const [genderSection, setGenderSection] = useState(null);
   const [courseSearchQuery, setCourseSearchQuery] = useState('');
 
   // Assignment submission view
@@ -146,7 +197,22 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
   const [profileDraft, setProfileDraft] = useState(trainerProfile);
   const [profilePhoto, setProfilePhoto] = useState(defaultAvatar);
   const [profilePhotoDraft, setProfilePhotoDraft] = useState(defaultAvatar);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef(null);
+
+  // ===== ID Card modal (naya — front/back card + QR, "Download Card"
+  // button jo pehle se tha wahi rehta hai, ye alag hai) =====
+  const [showIdCardModal, setShowIdCardModal] = useState(false);
+  const idCardTrainerPerson = {
+    name: trainerProfile.name,
+    employeeId: trainerProfile.employeeId,
+    designation: trainer?.designation || 'Trainer',
+    department: trainer?.department || (trainer?.courses || []).join(', '),
+    photo: profilePhoto,
+    createdAt: trainer?.createdAt,
+  };
 
   // Sync trainer state whenever trainer prop updates
   useEffect(() => {
@@ -444,8 +510,14 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
   };
 
   useEffect(() => {
-    if (selectedCourse && activeCourseTab === 'students') fetchLiveStudents(selectedCourse.title);
-  }, [selectedCourse, activeCourseTab]);
+    if (selectedCourse && activeCourseTab === 'students') {
+      fetchLiveStudents(selectedCourse.title);
+      // Admin agar is course ke students mein kuch change kare (naya add,
+      // move, edit) to yahan har 15s mein khud refresh ho jata hai.
+      const interval = setInterval(() => fetchLiveStudents(selectedCourse.title), 15000);
+      return () => clearInterval(interval);
+    }
+  }, [selectedCourse, activeCourseTab, trainer?.slotSchedule]);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
@@ -453,7 +525,6 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
     setCurrentMenu(menu);
     setSelectedCourse(null);
     setSelectedStudent(null);
-    setGenderSection(null);
     setCourseSearchQuery('');
     setIsSidebarOpen(false);
     setProfileMenuOpen(false);
@@ -464,7 +535,6 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
   const handleLogoutAction = () => {
     setIsSidebarOpen(false);
     setSelectedCourse(null);
-    setGenderSection(null);
     setCourseSearchQuery('');
     setCurrentMenu('dashboard');
     setProfileMenuOpen(false);
@@ -479,48 +549,115 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
 
   const cancelEditingProfile = () => {
     setIsEditingProfile(false);
+    setProfileSaveError('');
   };
 
   const saveProfileEdits = async () => {
-    setTrainerProfile(profileDraft);
-    setProfilePhoto(profilePhotoDraft);
-    setIsEditingProfile(false);
-
-    if (trainer?.id || trainer?._id) {
-      try {
-        const id = trainer.id || trainer._id;
-        const res = await fetch(`${API_BASE}/api/trainers/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: profileDraft.name,
-            email: profileDraft.email,
-            employeeId: profileDraft.employeeId,
-            photo: profilePhotoDraft,
-            phone: profileDraft.phone,
-          }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (onUpdateUser) onUpdateUser(data);
-        }
-      } catch (err) {
-        console.error('Failed to update trainer profile on backend:', err);
-      }
+    // IMPORTANT FIX: pehle ye function turant local state update kar deta
+    // tha (setTrainerProfile/setProfilePhoto) chahe backend request fail
+    // ho ya na ho — is wajah se screen par "saved" dikhta tha lekin agla
+    // login/refresh hone par purani photo wapas aa jati thi, kyunke
+    // database mein save hi nahi hua tha, aur error kahin dikhta bhi nahi
+    // tha (sirf console.error). Ab pehle backend save confirm hota hai,
+    // uske baad hi UI update hoti hai — fail hone par error message bhi
+    // profile page par dikhta hai.
+    if (!(trainer?.id || trainer?._id)) {
+      setProfileSaveError('Your account is not linked to a database record. Please contact admin.');
+      return;
+    }
+    setSavingProfile(true);
+    setProfileSaveError('');
+    try {
+      const id = trainer.id || trainer._id;
+      const res = await fetch(`${API_BASE}/api/trainers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: profileDraft.name,
+          email: profileDraft.email,
+          employeeId: profileDraft.employeeId,
+          photo: profilePhotoDraft,
+          phone: profileDraft.phone,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to save profile');
+      setTrainerProfile(profileDraft);
+      setProfilePhoto(profilePhotoDraft);
+      setIsEditingProfile(false);
+      if (onUpdateUser) onUpdateUser(data);
+    } catch (err) {
+      console.error('Failed to update trainer profile on backend:', err);
+      setProfileSaveError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSavingProfile(false);
     }
   };
 
-  const handlePhotoChange = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (file) {
+  // Photo ko canvas se resize/compress karta hai (max 500px, JPEG quality
+  // 0.8) taake phone/camera ki badi photo (jo kabhi kabhi 5-10MB+ hoti
+  // hai) upload mein zyada time na le aur server-side 5MB limit se na
+  // tootay. Blob return karta hai (FormData upload ke liye).
+  const compressImageToBlob = (file) =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        if (ev.target && ev.target.result) {
-          setProfilePhotoDraft(ev.target.result);
-        }
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 500;
+          let { width, height } = img;
+          if (width > height && width > MAX) {
+            height = Math.round((height * MAX) / width);
+            width = MAX;
+          } else if (height > MAX) {
+            width = Math.round((width * MAX) / height);
+            height = MAX;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => (blob ? resolve(blob) : reject(new Error('Photo compression failed'))),
+            'image/jpeg',
+            0.8
+          );
+        };
+        img.onerror = reject;
+        img.src = ev.target.result;
       };
+      reader.onerror = reject;
       reader.readAsDataURL(file);
-    }
+    });
+
+  // IMPORTANT: photo ab base64 ki tarah database mein save nahi hoti —
+  // select karte hi backend ke "/uploads" folder mein bheji jati hai
+  // (POST /api/upload/photo), aur wahan se mili chhoti si URL
+  // (/uploads/filename.jpg) hi profilePhotoDraft mein rakhi jati hai. Save
+  // Changes click karne par yehi URL trainer document mein save hoti hai.
+  const handlePhotoChange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    setProfileSaveError('');
+    compressImageToBlob(file)
+      .then((blob) => {
+        const formData = new FormData();
+        formData.append('photo', blob, 'photo.jpg');
+        return fetch(`${API_BASE}/api/upload/photo`, { method: 'POST', body: formData });
+      })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Photo upload failed');
+        const fullUrl = data.url.startsWith('http') ? data.url : `${API_BASE}${data.url}`;
+        setProfilePhotoDraft(fullUrl);
+      })
+      .catch((err) => {
+        console.error('Photo upload failed:', err);
+        setProfileSaveError(err.message || 'Photo upload failed. Please try again.');
+      })
+      .finally(() => setUploadingPhoto(false));
   };
 
   const downloadTrainerCard = () => {
@@ -679,11 +816,23 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
             saveProfileEdits={saveProfileEdits}
             cancelEditingProfile={cancelEditingProfile}
             downloadTrainerCard={downloadTrainerCard}
+            onViewIdCard={() => setShowIdCardModal(true)}
+            savingProfile={savingProfile}
+            profileSaveError={profileSaveError}
+            uploadingPhoto={uploadingPhoto}
+          />
+        )}
+
+        {showIdCardModal && (
+          <IDCardModal
+            type="trainer"
+            person={idCardTrainerPerson}
+            onClose={() => setShowIdCardModal(false)}
           />
         )}
 
         {currentMenu === 'calendar' && (
-          <CalendarPage calMonth={calMonth} calYear={calYear} changeMonth={changeMonth} />
+          <CalendarPage calMonth={calMonth} calYear={calYear} changeMonth={changeMonth} courses={myCourses} trainer={trainer} />
         )}
 
         {currentMenu === 'attendance' && (
@@ -704,8 +853,7 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
               <CoursesHome
                 courses={myCourses}
                 coursesLoading={coursesLoading}
-                genderSection={genderSection}
-                setGenderSection={setGenderSection}
+                trainer={trainer}
                 courseSearchQuery={courseSearchQuery}
                 setCourseSearchQuery={setCourseSearchQuery}
                 setSelectedCourse={setSelectedCourse}
@@ -720,7 +868,6 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
                 selectedStudent={selectedStudent}
                 setSelectedStudent={setSelectedStudent}
                 setSelectedCourse={setSelectedCourse}
-                setGenderSection={setGenderSection}
                 studentTab={studentTab}
                 setStudentTab={setStudentTab}
               />
@@ -728,7 +875,6 @@ const Dashboard = ({ onLogout, trainer, onUpdateUser }) => {
               <CourseDetailView
                 selectedCourse={selectedCourse}
                 setSelectedCourse={setSelectedCourse}
-                genderSection={genderSection}
                 activeCourseTab={activeCourseTab}
                 setActiveCourseTab={setActiveCourseTab}
                 setSelectedAssignment={setSelectedAssignment}

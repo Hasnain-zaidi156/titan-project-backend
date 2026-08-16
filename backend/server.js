@@ -1737,8 +1737,44 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+// ================= PHOTO UPLOADS (disk storage) =================
+// Pehle profile photo seedha base64 string ki tarah MongoDB document mein
+// save hoti thi (bohot bada document banata hai, aur badi photo par
+// request fail ho jati thi). Ab ye "uploads" folder banate hain aur photo
+// ko asal file ki tarah disk par save karte hain — database mein sirf
+// uski chhoti si URL (/uploads/filename.jpg) save hoti hai.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+const photoStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname) || '.jpg';
+        const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+        cb(null, unique);
+    },
+});
+const uploadPhoto = multer({
+    storage: photoStorage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    fileFilter: (req, file, cb) => {
+        if (!file.mimetype.startsWith('image/')) {
+            return cb(new Error('Only image files are allowed'));
+        }
+        cb(null, true);
+    },
+});
 
 const COURSES = ['Graphic Designing', 'Mobile App Development', 'Web Development', 'Digital Marketing', 'Spoken English'];
 const CAMPUSES = ['TITAN Sukkur Campus', 'TITAN Karachi Campus', 'TITAN Lahore Campus'];
@@ -1748,6 +1784,25 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// /uploads folder ko static serve karte hain taake save hone ke baad
+// photo URL (e.g. /uploads/172xxxx.jpg) seedha browser mein khul sake.
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Photo upload endpoint — form-data field name "photo" expect karta hai.
+// Response: { url: "/uploads/<filename>" } — isi URL ko trainer/student
+// document ke "photo" field mein save karte hain.
+app.post('/api/upload/photo', (req, res) => {
+    uploadPhoto.single('photo')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ message: err.message || 'Photo upload failed' });
+        }
+        if (!req.file) {
+            return res.status(400).json({ message: 'No photo file received' });
+        }
+        res.json({ url: `/uploads/${req.file.filename}` });
+    });
+});
 
 // ================= JWT AUTH HELPERS =================
 // Har login route (admin/trainer/student) ab ek signed token bhi
@@ -1899,6 +1954,19 @@ const trainerSchema = new mongoose.Schema({
 
 const Trainer = mongoose.model('Trainer', trainerSchema);
 
+// ================= CALENDAR OVERRIDE SCHEMA & MODEL =================
+// Trainer apne calendar ke kisi specific date par admin-assigned auto
+// schedule ko manually edit/replace kar sakta hai (label + color).
+const calendarOverrideSchema = new mongoose.Schema({
+    trainerId: { type: String, required: true }, // trainer.employeeId
+    date: { type: String, required: true }, // 'YYYY-MM-DD'
+    label: { type: String, default: '' },
+    color: { type: String, default: '#dbeafe' },
+}, { timestamps: true });
+calendarOverrideSchema.index({ trainerId: 1, date: 1 }, { unique: true });
+
+const CalendarOverride = mongoose.model('CalendarOverride', calendarOverrideSchema);
+
 // ================= STUDENT ATTENDANCE SCHEMA & MODEL =================
 const attendanceSchema = new mongoose.Schema({
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
@@ -2015,6 +2083,22 @@ progressSchema.index({ course: 1, campus: 1, batch: 1, trainerId: 1 }, { unique:
 
 const Progress = mongoose.model('Progress', progressSchema);
 
+// Global settings — single document, right now used only to let the admin
+// open/close new-student admissions from the Administration page. The
+// public Enroll form checks this before letting anyone submit.
+const settingsSchema = new mongoose.Schema({
+    key: { type: String, required: true, unique: true },
+    admissionsOpen: { type: Boolean, default: true },
+}, { timestamps: true });
+
+const Settings = mongoose.model('Settings', settingsSchema);
+
+async function getSettings() {
+    let doc = await Settings.findOne({ key: 'global' });
+    if (!doc) doc = await Settings.create({ key: 'global', admissionsOpen: true });
+    return doc;
+}
+
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
 function serializeStudent(doc) {
@@ -2099,6 +2183,16 @@ function serializeTrainerAttendanceRequest(doc) {
         type: doc.type,
         status: doc.status,
         reason: doc.reason || '',
+    };
+}
+
+function serializeCalendarOverride(doc) {
+    return {
+        id: doc._id.toString(),
+        trainerId: doc.trainerId,
+        date: doc.date,
+        label: doc.label || '',
+        color: doc.color || '#dbeafe',
     };
 }
 
@@ -3042,6 +3136,56 @@ app.post('/api/trainer-attendance-requests', async(req, res) => {
     }
 });
 
+// ================= CALENDAR OVERRIDE ROUTES =================
+// Trainer ke calendar par ek specific date ke liye manual label/color save
+// karna — admin-assigned auto schedule ko us din ke liye override karta hai.
+app.get('/api/calendar-overrides', async(req, res) => {
+    try {
+        if (!isDbConnected()) return res.json([]);
+        const filter = {};
+        if (req.query.trainerId) filter.trainerId = req.query.trainerId;
+        const overrides = await CalendarOverride.find(filter);
+        res.json(overrides.map(serializeCalendarOverride));
+    } catch (error) {
+        console.error('Fetch calendar overrides error:', error);
+        res.status(500).json({ message: 'Failed to fetch calendar overrides', error: error.message });
+    }
+});
+
+app.post('/api/calendar-overrides', async(req, res) => {
+    try {
+        if (!isDbConnected()) {
+            return res.status(503).json({ message: 'Database connection unavailable' });
+        }
+        const { trainerId, date, label, color } = req.body;
+        if (!trainerId || !date) {
+            return res.status(400).json({ message: 'trainerId and date are required' });
+        }
+        const saved = await CalendarOverride.findOneAndUpdate(
+            { trainerId, date },
+            { trainerId, date, label: label || '', color: color || '#dbeafe' },
+            { new: true, upsert: true }
+        );
+        res.status(201).json(serializeCalendarOverride(saved));
+    } catch (error) {
+        console.error('Save calendar override error:', error);
+        res.status(500).json({ message: 'Failed to save calendar override', error: error.message });
+    }
+});
+
+app.delete('/api/calendar-overrides/:id', async(req, res) => {
+    try {
+        if (!isDbConnected()) {
+            return res.status(503).json({ message: 'Database connection unavailable' });
+        }
+        await CalendarOverride.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Deleted' });
+    } catch (error) {
+        console.error('Delete calendar override error:', error);
+        res.status(500).json({ message: 'Failed to delete calendar override', error: error.message });
+    }
+});
+
 app.get('/api/assignments', async(req, res) => {
     try {
         if (!isDbConnected()) return res.json([]);
@@ -3340,7 +3484,7 @@ app.post('/api/students/:id/generate-voucher', async(req, res) => {
         }
 
         const now = new Date();
-        const targetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const targetDate = new Date(now.getFullYear(), now.getMonth(), 1);
         const yyyymm = `${targetDate.getFullYear()}${pad2(targetDate.getMonth() + 1)}`;
         const monthLabel = targetDate.toLocaleString('en-US', { month: 'short', year: 'numeric' });
         const dueDate = `08-${targetDate.toLocaleString('en-US', { month: 'short' })}-${targetDate.getFullYear()}`;
@@ -3366,10 +3510,45 @@ app.post('/api/students/:id/generate-voucher', async(req, res) => {
     }
 });
 
+// Admission open/close — admin toggles this from Administration page;
+// the public Enroll form reads it to decide whether to show the form.
+app.get('/api/admission-status', async(req, res) => {
+    try {
+        if (!isDbConnected()) {
+            return res.status(503).json({ message: 'Database connection unavailable' });
+        }
+        const settings = await getSettings();
+        res.json({ admissionsOpen: settings.admissionsOpen });
+    } catch (error) {
+        console.error('Get admission status error:', error);
+        res.status(500).json({ message: 'Failed to load admission status', error: error.message });
+    }
+});
+
+app.post('/api/admission-status', async(req, res) => {
+    try {
+        if (!isDbConnected()) {
+            return res.status(503).json({ message: 'Database connection unavailable' });
+        }
+        const { admissionsOpen } = req.body;
+        const settings = await getSettings();
+        settings.admissionsOpen = !!admissionsOpen;
+        await settings.save();
+        res.json({ admissionsOpen: settings.admissionsOpen });
+    } catch (error) {
+        console.error('Update admission status error:', error);
+        res.status(500).json({ message: 'Failed to update admission status', error: error.message });
+    }
+});
+
 app.post('/api/enroll', async(req, res) => {
     try {
         if (!isDbConnected()) {
             return res.status(503).json({ message: 'Database connection unavailable' });
+        }
+        const settings = await getSettings();
+        if (!settings.admissionsOpen) {
+            return res.status(403).json({ message: 'Admissions are currently closed. Please check back later.' });
         }
         const {
             studentName,
@@ -3391,14 +3570,18 @@ app.post('/api/enroll', async(req, res) => {
             lastQualification,
             hearAboutUs,
             photo,
-            password,
+            agreedToTerms,
         } = req.body;
 
-        if (!studentName || !fatherName || !cnic || !phone || !password) {
-            return res.status(400).json({ message: 'Name, father name, CNIC, phone and password are required' });
+        // FIX: Admission form ab password nahi maangta — student baad mein
+        // portal ke "Create Password" screen se CNIC + DOB se apna password
+        // khud bana lega. Yahan sirf basic required fields + Terms &
+        // Conditions checkbox check hote hain.
+        if (!studentName || !fatherName || !cnic || !phone) {
+            return res.status(400).json({ message: 'Name, father name, CNIC and phone are required' });
         }
-        if (String(password).length < 6) {
-            return res.status(400).json({ message: 'Password must be at least 6 characters' });
+        if (!agreedToTerms) {
+            return res.status(400).json({ message: 'You must agree to the Terms & Conditions to submit your application.' });
         }
 
         const existing = await Student.findOne({ cnic });
@@ -3408,7 +3591,6 @@ app.post('/api/enroll', async(req, res) => {
 
         const admissionNo = await generateUniqueAdmissionNo();
         const rollNumber = await generateUniqueRollNumber();
-        const passwordHash = await bcrypt.hash(String(password), 10);
 
         const created = await Student.create({
             admissionNo,
@@ -3434,8 +3616,8 @@ app.post('/api/enroll', async(req, res) => {
             photo: photo || '',
             status: 'pending',
             paymentStatus: 'Not Generated',
-            password: passwordHash,
-            accountActivated: true,
+            password: '',
+            accountActivated: false,
         });
 
         res.status(201).json({ message: 'Application submitted', student: serializeStudent(created) });

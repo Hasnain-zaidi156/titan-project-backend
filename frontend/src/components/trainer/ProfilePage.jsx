@@ -6,17 +6,23 @@ const ProfilePage = ({
   isEditingProfile, profileDraft, setProfileDraft,
   profilePhotoDraft, photoInputRef, handlePhotoChange,
   startEditingProfile, saveProfileEdits, cancelEditingProfile, downloadTrainerCard,
+  onViewIdCard, savingProfile, profileSaveError, uploadingPhoto,
 }) => {
   return (
     <div className="profile-page-wrapper animated-fade">
       <div className="profile-cover-banner" style={{ backgroundImage: `url(${PROFILE_BG_IMG})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
         <div className="profile-cover-overlay"></div>
-        <div className="profile-cover-avatar-wrap" onClick={() => { if (!isEditingProfile) startEditingProfile(); setTimeout(() => photoInputRef.current?.click(), 50); }} style={{ cursor: 'pointer' }}>
+        <div className="profile-cover-avatar-wrap" onClick={() => { if (!isEditingProfile) startEditingProfile(); photoInputRef.current?.click(); }} style={{ cursor: 'pointer' }}>
           <img src={isEditingProfile ? profilePhotoDraft : profilePhoto} alt="Avatar" className="profile-cover-avatar" />
-          <button className="profile-photo-upload-btn" onClick={(e) => { e.stopPropagation(); if (!isEditingProfile) startEditingProfile(); setTimeout(() => photoInputRef.current?.click(), 50); }} title="Change photo">
+          <button className="profile-photo-upload-btn" onClick={(e) => { e.stopPropagation(); if (!isEditingProfile) startEditingProfile(); photoInputRef.current?.click(); }} title="Change photo">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
           </button>
           <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
+          {uploadingPhoto && (
+            <div style={{ position: 'absolute', top: 0, left: 0, width: 96, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', borderRadius: '50%', color: '#fff', fontSize: 10.5, fontWeight: 700, textAlign: 'center' }}>
+              Uploading...
+            </div>
+          )}
         </div>
       </div>
 
@@ -32,17 +38,23 @@ const ProfilePage = ({
         <div className="profile-action-buttons">
           {isEditingProfile ? (
             <>
-              <button className="btn-outline-action" onClick={cancelEditingProfile}>Cancel</button>
-              <button className="btn-dark-action" onClick={saveProfileEdits}>Save Changes</button>
+              <button className="btn-outline-action" onClick={cancelEditingProfile} disabled={savingProfile}>Cancel</button>
+              <button className="btn-dark-action" onClick={saveProfileEdits} disabled={savingProfile || uploadingPhoto}>
+                {savingProfile ? 'Saving...' : uploadingPhoto ? 'Uploading Photo...' : 'Save Changes'}
+              </button>
             </>
           ) : (
             <>
               <button className="btn-outline-action" onClick={startEditingProfile}>Edit Profile</button>
-              <button className="btn-dark-action" onClick={downloadTrainerCard}>Download Card</button>
+              {/* <button className="btn-dark-action" onClick={downloadTrainerCard}>Download Card</button> */}
+              <button className="btn-dark-action" onClick={onViewIdCard}>View ID Card</button>
             </>
           )}
         </div>
       </div>
+      {profileSaveError && (
+        <p style={{ color: '#ef4444', fontSize: '0.85rem', padding: '0 4px 10px' }}>{profileSaveError}</p>
+      )}
 
       <div className="profile-grid-layout">
         <div className="profile-info-card">

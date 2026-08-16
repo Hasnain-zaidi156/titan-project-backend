@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "./StudentAuth.css";
 
@@ -10,22 +10,25 @@ const BG_URL = "https://i.ibb.co/3mPG35mK/titan-logo-bg.jpg";
 const COURSES = ["Graphic Designing", "Mobile App Development", "Web Development", "Digital Marketing", "Spoken English"];
 const CAMPUSES = ["TITAN Sukkur Campus", "TITAN Karachi Campus", "TITAN Lahore Campus"];
 
-// Three flows in one screen, matching how a real student ends up with a
-// working login:
-//  - "login"    : Roll Number/CNIC + password (normal day-to-day use)
-//  - "enroll"   : brand-new student fills their own application — creates
-//                 the record AND the password together, shows up as
-//                 "pending" in admin. Profile photo is required here.
-//  - "activate" : admin already added this student manually (no password
-//                 yet) — student proves CNIC + DOB, then sets a password
-export default function StudentAuth({ onLoginSuccess }) {
-  const [mode, setMode] = useState("login");
+// Dedicated Admission / Enroll page — login and "Create Password" ka kaam
+// ab yahan nahi, wo TitanPortal (home page) par hota hai. Yeh page sirf
+// naya student apply karne ke liye hai. Admin "Administration" page se
+// admissions band/khula kar sakta hai — jab band ho to yahan form ki jagah
+// ek clean "closed" message dikhta hai.
+export default function StudentAuth() {
   const navigate = useNavigate();
+  const [admissionsOpen, setAdmissionsOpen] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(true);
 
-  const handleLoginSuccess = (role, data) => {
-    onLoginSuccess(role, data);
-    navigate("/student");
-  };
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/admission-status`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) setAdmissionsOpen(data.admissionsOpen !== false); })
+      .catch(() => { if (!cancelled) setAdmissionsOpen(true); })
+      .finally(() => { if (!cancelled) setStatusLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="ta-page" style={{ backgroundImage: `url(${BG_URL})` }}>
@@ -37,22 +40,24 @@ export default function StudentAuth({ onLoginSuccess }) {
             <img src={LOGO_URL} alt="TITAN Logo" className="ta-logo-img" />
           </div>
           <p className="ta-fullname">Taj Institute of Technology and Applied Networks</p>
-          <h1 className="ta-title">Student Portal</h1>
+          <h1 className="ta-title">Admission Form</h1>
         </div>
 
         <div className="ta-card">
-          <div className="ta-tabs">
-            <button type="button" className={`ta-tab ${mode === "login" ? "active" : ""}`} onClick={() => setMode("login")}>Login</button>
-            <button type="button" className={`ta-tab ${mode === "activate" ? "active" : ""}`} onClick={() => setMode("activate")}>Create Password</button>
-            <button type="button" className={`ta-tab ${mode === "enroll" ? "active" : ""}`} onClick={() => setMode("enroll")}>New? Enroll</button>
-          </div>
-
           <div className="ta-form-area">
-            {mode === "login" && <LoginForm onLoginSuccess={handleLoginSuccess} />}
-            {mode === "activate" && <ActivateForm onDone={() => setMode("login")} />}
-            {mode === "enroll" && <EnrollForm onDone={() => setMode("login")} />}
+            {statusLoading ? (
+              <div className="ta-status-loading">Checking admission status…</div>
+            ) : admissionsOpen ? (
+              <EnrollForm onDone={() => navigate("/")} />
+            ) : (
+              <ClosedNotice onBack={() => navigate("/")} />
+            )}
           </div>
         </div>
+
+        <button type="button" className="ta-back-link" onClick={() => navigate("/")}>
+          ← Back to Portal
+        </button>
 
         <p className="ta-footer-note">© TITAN — Taj Institute of Technology and Applied Networks</p>
       </div>
@@ -60,103 +65,16 @@ export default function StudentAuth({ onLoginSuccess }) {
   );
 }
 
-function LoginForm({ onLoginSuccess }) {
-  const [form, setForm] = useState({ identifier: "", password: "" });
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/student-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Login failed");
-      onLoginSuccess("student", data.student);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+function ClosedNotice({ onBack }) {
   return (
-    <form onSubmit={submit} className="ta-form">
-      <h3>Login</h3>
-      <p className="ta-instruction">Enter the Roll Number or CNIC and password used during registration.</p>
-
-      <label className="ta-label">Roll Number or CNIC</label>
-      <input className="ta-input" value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} required />
-
-      <label className="ta-label">Password</label>
-      <input type="password" className="ta-input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-
-      {error && <p className="ta-error">{error}</p>}
-      <button className="ta-submit-btn" disabled={loading}>{loading ? "Logging in…" : "Login"}</button>
-    </form>
-  );
-}
-
-function ActivateForm({ onDone }) {
-  const [form, setForm] = useState({ cnic: "", dob: "", password: "", confirm: "" });
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-    if (form.password !== form.confirm) {
-      setError("Passwords do not match");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/students/activate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cnic: form.cnic, dob: form.dob, password: form.password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Could not create password");
-      setSuccess("Password created! You can log in now.");
-      setTimeout(onDone, 1200);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={submit} className="ta-form">
-      <h3>Create Password</h3>
+    <div className="ta-closed">
+      <div className="ta-closed-icon">🚫</div>
+      <h3>Admissions Are Currently Closed</h3>
       <p className="ta-instruction">
-        For students already registered by admin — enter the CNIC and Date of Birth on your record to verify it's you, then set your own password.
+        We're not accepting new applications right now. Please check back later or contact the campus for more information.
       </p>
-
-      <label className="ta-label">CNIC</label>
-      <input className="ta-input" value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} placeholder="XXXXX-XXXXXXX-X" required />
-
-      <label className="ta-label">Date of Birth</label>
-      <input type="date" className="ta-input" value={form.dob} onChange={(e) => setForm({ ...form, dob: e.target.value })} required />
-
-      <label className="ta-label">New Password</label>
-      <input type="password" className="ta-input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={6} />
-
-      <label className="ta-label">Confirm Password</label>
-      <input type="password" className="ta-input" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} required minLength={6} />
-
-      {error && <p className="ta-error">{error}</p>}
-      {success && <p className="ta-success">{success}</p>}
-      <button className="ta-submit-btn" disabled={loading}>{loading ? "Creating…" : "Create Password"}</button>
-    </form>
+      <button type="button" className="ta-submit-btn" onClick={onBack}>Back to Portal</button>
+    </div>
   );
 }
 
@@ -165,10 +83,10 @@ function EnrollForm({ onDone }) {
   const [form, setForm] = useState({
     studentName: "", fatherName: "", cnic: "", phone: "", fatherPhone: "", email: "",
     dob: "", address: "", gender: "Male", course: COURSES[0], campus: CAMPUSES[0], batch: "",
-    computerProficiency: "", lastQualification: "", hearAboutUs: "", laptop: "No",
-    password: "", confirm: "", photo: "",
+    computerProficiency: "", lastQualification: "", hearAboutUs: "", laptop: "No", photo: "",
   });
   const [photoPreview, setPhotoPreview] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -182,8 +100,8 @@ function EnrollForm({ onDone }) {
       setError("Please choose a valid image file");
       return;
     }
-    if (file.size > 3 * 1024 * 1024) {
-      setError("Photo must be under 3MB");
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Photo must be under 5MB");
       return;
     }
     setError("");
@@ -204,8 +122,8 @@ function EnrollForm({ onDone }) {
       setError("Profile photo is required");
       return;
     }
-    if (form.password !== form.confirm) {
-      setError("Passwords do not match");
+    if (!agreedToTerms) {
+      setError("Please agree to the Terms & Conditions to continue");
       return;
     }
     setLoading(true);
@@ -213,12 +131,12 @@ function EnrollForm({ onDone }) {
       const res = await fetch(`${API_BASE}/api/enroll`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, country: "Pakistan" }),
+        body: JSON.stringify({ ...form, country: "Pakistan", agreedToTerms: true }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Application failed");
-      setSuccess(`Application submitted! Your Roll Number is ${data.student.rollNumber}. You can log in now — your admission is pending admin review.`);
-      setTimeout(onDone, 2500);
+      setSuccess(`Application submitted! Your Roll Number is ${data.student.rollNumber}. Once your admission is approved, use "Create Password" on the portal (with your CNIC + Date of Birth) to log in.`);
+      setTimeout(onDone, 3200);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -228,7 +146,7 @@ function EnrollForm({ onDone }) {
 
   return (
     <form onSubmit={submit} className="ta-form">
-      <h3>New? Enroll</h3>
+      <h3>New Admission</h3>
       <p className="ta-instruction">Fill your details to apply. Your application goes straight to the admin portal for review.</p>
 
       <div className="ta-photo-row">
@@ -254,10 +172,11 @@ function EnrollForm({ onDone }) {
         />
         <div className="ta-photo-caption">
           <span>Profile Photo *</span>
-          <small>Required — tap the circle to upload</small>
+          <small>Required — tap the circle to upload (max 5MB)</small>
         </div>
       </div>
 
+      <p className="ta-section-title">Personal Information</p>
       <div className="ta-row">
         <div className="ta-col"><label className="ta-label">Full Name *</label><input className="ta-input" value={form.studentName} onChange={update("studentName")} required /></div>
         <div className="ta-col"><label className="ta-label">Father Name *</label><input className="ta-input" value={form.fatherName} onChange={update("fatherName")} required /></div>
@@ -267,17 +186,6 @@ function EnrollForm({ onDone }) {
         <div className="ta-col"><label className="ta-label">CNIC *</label><input className="ta-input" value={form.cnic} onChange={update("cnic")} placeholder="XXXXX-XXXXXXX-X" required /></div>
         <div className="ta-col"><label className="ta-label">Date of Birth *</label><input type="date" className="ta-input" value={form.dob} onChange={update("dob")} required /></div>
       </div>
-
-      <div className="ta-row">
-        <div className="ta-col"><label className="ta-label">Phone *</label><input className="ta-input" value={form.phone} onChange={update("phone")} required /></div>
-        <div className="ta-col"><label className="ta-label">Father's Phone</label><input className="ta-input" value={form.fatherPhone} onChange={update("fatherPhone")} /></div>
-      </div>
-
-      <label className="ta-label">Email</label>
-      <input type="email" className="ta-input" value={form.email} onChange={update("email")} />
-
-      <label className="ta-label">Address</label>
-      <input className="ta-input" value={form.address} onChange={update("address")} />
 
       <div className="ta-row">
         <div className="ta-col">
@@ -294,6 +202,19 @@ function EnrollForm({ onDone }) {
         </div>
       </div>
 
+      <p className="ta-section-title">Contact Details</p>
+      <div className="ta-row">
+        <div className="ta-col"><label className="ta-label">Phone *</label><input className="ta-input" value={form.phone} onChange={update("phone")} required /></div>
+        <div className="ta-col"><label className="ta-label">Father's Phone</label><input className="ta-input" value={form.fatherPhone} onChange={update("fatherPhone")} /></div>
+      </div>
+
+      <label className="ta-label">Email</label>
+      <input type="email" className="ta-input" value={form.email} onChange={update("email")} />
+
+      <label className="ta-label">Address</label>
+      <input className="ta-input" value={form.address} onChange={update("address")} />
+
+      <p className="ta-section-title">Course Details</p>
       <div className="ta-row">
         <div className="ta-col">
           <label className="ta-label">Course *</label>
@@ -318,14 +239,30 @@ function EnrollForm({ onDone }) {
       <label className="ta-label">Where did you hear about us?</label>
       <input className="ta-input" value={form.hearAboutUs} onChange={update("hearAboutUs")} />
 
-      <div className="ta-row">
-        <div className="ta-col"><label className="ta-label">Create Password *</label><input type="password" className="ta-input" value={form.password} onChange={update("password")} required minLength={6} /></div>
-        <div className="ta-col"><label className="ta-label">Confirm Password *</label><input type="password" className="ta-input" value={form.confirm} onChange={update("confirm")} required minLength={6} /></div>
+      <p className="ta-section-title">Terms &amp; Conditions</p>
+      <div className="ta-terms-box">
+        <ul className="ta-terms-list">
+          <li>A minimum of <strong>75% attendance</strong> is mandatory throughout the course. Falling below this may affect your certification.</li>
+          <li>Students must show <strong>respectful behavior</strong> at all times toward trainers, staff and fellow students. Misconduct, misbehavior or indiscipline of any kind will not be tolerated.</li>
+          <li>Fee vouchers must be paid by the due date each month to keep your admission active.</li>
+          <li>Any damage to institute property or violation of the code of conduct may result in suspension or cancellation of admission.</li>
+          <li>All information provided in this form is accurate to the best of my knowledge.</li>
+        </ul>
       </div>
+
+      <label className="ta-checkbox-row">
+        <input
+          type="checkbox"
+          checked={agreedToTerms}
+          onChange={(e) => setAgreedToTerms(e.target.checked)}
+        />
+        <span>I have read and agree to the Terms &amp; Conditions above.</span>
+      </label>
 
       {error && <p className="ta-error">{error}</p>}
       {success && <p className="ta-success">{success}</p>}
-      <button className="ta-submit-btn" disabled={loading}>{loading ? "Submitting…" : "Submit Application"}</button>
+      <button className="ta-submit-btn" disabled={loading || !agreedToTerms}>{loading ? "Submitting…" : "Submit Application"}</button>
     </form>
   );
 }
+

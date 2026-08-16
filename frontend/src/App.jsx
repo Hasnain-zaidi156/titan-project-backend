@@ -137,7 +137,15 @@ function App() {
           }
         />
 
-        <Route path="/student-login" element={<StudentAuth onLoginSuccess={handleLoginSuccess} />} />
+        {/* Dedicated admission/enroll page — reachable from the "New
+           Admission" button on the home portal. Login itself stays on
+           TitanPortal (/), this page no longer has a login section.
+           Temporarily commented out — admission section hidden. */}
+
+{/* Ye apply form wala section */}
+
+        <Route path="/student-login" element={<StudentAuth />} />
+        <Route path="/apply" element={<StudentAuth />} />
 
         <Route
           path="/student"
@@ -155,6 +163,10 @@ function App() {
                 phone={user.data?.phone}
                 photo={user.data?.photo}
                 timing={user.data?.timing}
+                fatherName={user.data?.fatherName}
+                admissionNo={user.data?.admissionNo}
+                batch={user.data?.batch}
+                createdAt={user.data?.createdAt}
                 onLogout={handleLogout}
               />
             ) : (

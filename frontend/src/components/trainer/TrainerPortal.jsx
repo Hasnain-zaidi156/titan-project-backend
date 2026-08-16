@@ -35,6 +35,37 @@ export default function TrainerPortal() {
     else localStorage.removeItem(STORAGE_KEY)
   }, [trainer])
 
+  // Trainer ka record ek dafa login par mil kar localStorage mein cache ho
+  // jata hai — agar admin baad mein uske assigned days/courses/campus change
+  // kare to wo yahan khud-ba-khud nazar nahi aata jab tak dobara login na ho.
+  // Isliye login ke baad turant (page refresh/reload par bhi) aur phir har
+  // 15 second mein backend se latest record laa kar silently sync karte hain
+  // (session/UI disturb kiye baghair) — admin ka koi bhi change (days,
+  // courses, campus, photo) turant reflect ho jayega, reload par bhi purana
+  // cached data nahi dikhega.
+  useEffect(() => {
+    if (!trainer?.employeeId) return
+    let cancelled = false
+
+    const refreshTrainer = () => {
+      fetch(`${API_BASE}/api/trainers`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((list) => {
+          if (cancelled) return
+          const fresh = (Array.isArray(list) ? list : []).find((t) => t.employeeId === trainer.employeeId)
+          if (fresh) {
+            setTrainer((prev) => (prev ? { ...prev, ...fresh } : fresh))
+          }
+        })
+        .catch((err) => console.error("Failed to refresh trainer record:", err))
+    }
+
+    refreshTrainer()
+    const interval = setInterval(refreshTrainer, 15000)
+    return () => { cancelled = true; clearInterval(interval) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trainer?.employeeId])
+
   const handleLogin = async (e) => {
     e.preventDefault()
     if (!email.trim() || !password) {

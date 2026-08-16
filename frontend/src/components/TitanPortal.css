@@ -347,6 +347,29 @@
   color: var(--primary-blue);
 }
 
+/* "New Admission" button — visually distinct (gold) from the plain
+   login-switch buttons so it stands out as the call-to-action. */
+.apply-admission-btn {
+  width: 100%;
+  background-color: var(--accent-gold);
+  border: 1px solid var(--accent-gold);
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: inherit;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(201, 162, 75, 0.35);
+  transition: var(--transition-fast);
+}
+
+.apply-admission-btn:hover {
+  background-color: #b48f3d;
+  border-color: #b48f3d;
+  transform: translateY(-1px);
+}
+
 /* Footer note */
 .titan-footer-note {
   margin-top: 22px;

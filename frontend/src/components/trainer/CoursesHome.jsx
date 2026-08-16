@@ -1,14 +1,34 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { parseScheduleDays } from './scheduleUtils';
+
+const now = new Date();
+// Is week (Sun-Sat) ke real calendar dates, current weekday ke sath.
+const startOfWeek = new Date(now);
+startOfWeek.setDate(now.getDate() - now.getDay());
+const weekDates = Array.from({ length: 7 }, (_, i) => {
+  const d = new Date(startOfWeek);
+  d.setDate(startOfWeek.getDate() + i);
+  return d;
+});
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const CoursesHome = ({
   courses, // trainer ke live-computed courses (Dashboard se real student data se banti hain)
   coursesLoading,
-  genderSection, setGenderSection,
+  trainer, // logged-in trainer record — Teaching Schedule isi ke slotSchedule se driven hai
   courseSearchQuery, setCourseSearchQuery,
   setSelectedCourse, setActiveCourseTab, setStudentsPage,
   setSelectedAssignment, setSelectedQuiz,
 }) => {
   const courseList = courses || [];
+
+  // Teaching Schedule widget — ADMIN NE JO trainer.slotSchedule diya hai
+  // sirf wahi din yahan mark hote hain (koi aggregation/guess nahi), taake
+  // admin jab bhi days change kare, ye khud-ba-khud sahi din dikhaye.
+  const assignedWeekdays = useMemo(() => parseScheduleDays(trainer?.slotSchedule), [trainer?.slotSchedule]);
+  const assignedCourseNames = (trainer?.courses && trainer.courses.length > 0)
+    ? trainer.courses
+    : [...new Set(courseList.map((c) => c.title))];
 
   if (coursesLoading) {
     return (
@@ -18,13 +38,10 @@ const CoursesHome = ({
       </>
     );
   }
-  const maleCourses = courseList.filter(c => c.type.includes('Male'));
-  const femaleCourses = courseList.filter(c => c.type.includes('Female'));
-  const maleEnrolledTotal = maleCourses.reduce((sum, c) => sum + c.enrolled, 0);
-  const femaleEnrolledTotal = femaleCourses.reduce((sum, c) => sum + c.enrolled, 0);
-  const totalEnrolled = maleEnrolledTotal + femaleEnrolledTotal;
 
-  const sectionCourses = (genderSection ? courseList.filter(c => c.type.includes(genderSection)) : []).filter(c => {
+  const totalEnrolled = courseList.reduce((sum, c) => sum + c.enrolled, 0);
+
+  const filteredCourses = courseList.filter(c => {
     const q = courseSearchQuery.toLowerCase();
     if (!q) return true;
     return c.title.toLowerCase().includes(q) || c.campus.toLowerCase().includes(q) || c.batch.toLowerCase().includes(q);
@@ -40,69 +57,50 @@ const CoursesHome = ({
         <div className="schedule-compact-widget">
           <div className="schedule-title-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>Teaching Schedule</div>
           <div className="schedule-days-flex">
-            <div className="day-pill present">Sun <span>14</span></div>
-            <div className="day-pill present">Mon <span>15</span></div>
-            <div className="day-pill">Tue <span>16</span></div>
-            <div className="day-pill current">Wed <span>17</span></div>
-            <div className="day-pill">Thu <span>18</span></div>
-            <div className="day-pill present">Fri <span>19</span></div>
-            <div className="day-pill present">Sat <span>20</span></div>
+            {weekDates.map((d, i) => {
+              const isTeachingDay = assignedWeekdays.includes(i);
+              const isCurrent = d.toDateString() === now.toDateString();
+              return (
+                <div
+                  key={i}
+                  className={`day-pill${isTeachingDay ? ' present' : ''}${isCurrent ? ' current' : ''}`}
+                  title={isTeachingDay ? assignedCourseNames.join(', ') : 'No class'}
+                >
+                  {WEEKDAY_LABELS[i]} <span>{d.getDate()}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {!genderSection ? (
-        <>
-          <div className="section-title-bar"><h3>Active Courses</h3></div>
-          <section className="gender-section-grid">
-            <div className="gender-section-card male-section-card" onClick={() => { setGenderSection('Male'); setCourseSearchQuery(''); }}>
-              <div className="gender-section-icon-badge blue-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><circle cx="12" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /></svg></div>
-              <h3>Male Courses</h3>
-              <p className="gender-section-meta">{maleCourses.length} active courses · {maleEnrolledTotal} students</p>
-              <span className="gender-section-arrow">View courses →</span>
+      <div className="section-title-bar gender-section-header-row">
+        <h3>All Courses</h3>
+        <input type="text" className="table-search-input-box gender-course-search-box" placeholder="Search course, campus or batch..." value={courseSearchQuery} onChange={(e) => setCourseSearchQuery(e.target.value)} />
+      </div>
+      <section className="courses-responsive-grid">
+        {filteredCourses.length === 0 && <p className="muted-italic-text">No courses match your search.</p>}
+        {filteredCourses.map((course) => (
+          <div key={course.id} className="course-clean-card" onClick={() => { setSelectedCourse(course); setActiveCourseTab('students'); setStudentsPage(1); setSelectedAssignment(null); setSelectedQuiz(null); }}>
+            <div className="card-top-accent" style={{ backgroundColor: course.bgHeader }}>
+              <div><h4>{course.title}</h4><span className="subtitle-tag">All Students</span></div>
+              <span className="batch-outline-pill">{course.batch}</span>
             </div>
-            <div className="gender-section-card female-section-card" onClick={() => { setGenderSection('Female'); setCourseSearchQuery(''); }}>
-              <div className="gender-section-icon-badge purple-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#9333ea" strokeWidth="2"><circle cx="12" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /></svg></div>
-              <h3>Female Courses</h3>
-              <p className="gender-section-meta">{femaleCourses.length} active courses · {femaleEnrolledTotal} students</p>
-              <span className="gender-section-arrow">View courses →</span>
-            </div>
-          </section>
-        </>
-      ) : (
-        <>
-          <div className="breadcrumbs">
-            <span className="breadcrumb-nav-link" onClick={() => { setGenderSection(null); setCourseSearchQuery(''); }}>Active Courses</span> &gt; <span className="current-crumb">{genderSection}</span>
-          </div>
-          <div className="section-title-bar gender-section-header-row">
-            <h3>{genderSection} Courses</h3>
-            <input type="text" className="table-search-input-box gender-course-search-box" placeholder="Search course, campus or batch..." value={courseSearchQuery} onChange={(e) => setCourseSearchQuery(e.target.value)} />
-          </div>
-          <section className="courses-responsive-grid">
-            {sectionCourses.length === 0 && <p className="muted-italic-text">No courses match your search.</p>}
-            {sectionCourses.map((course) => (
-              <div key={course.id} className="course-clean-card" onClick={() => { setSelectedCourse(course); setActiveCourseTab('students'); setStudentsPage(1); setSelectedAssignment(null); setSelectedQuiz(null); }}>
-                <div className="card-top-accent" style={{ backgroundColor: course.bgHeader }}>
-                  <div><h4>{course.title}</h4><span className="subtitle-tag">{course.type}</span></div>
-                  <span className="batch-outline-pill">{course.batch}</span>
-                </div>
-                <div className="card-body-content">
-                  <p className="location-text">{course.campus}</p>
-                  <div className="progress-container-box">
-                    <div className="flex-space-between text-small"><span>Progress</span><span>{course.progress}% Completed</span></div>
-                    <div className="progress-bar-rail"><div className="progress-bar-fill-track" style={{ width: `${course.progress}%`, backgroundColor: course.accentColor }}></div></div>
-                  </div>
-                  <div className="meta-footer-info">
-                    <div>Enrolled: {course.enrolled} students</div>
-                    <div>Schedule: {course.schedule}</div>
-                    <div>Started On: {course.startedOn}</div>
-                  </div>
-                </div>
+            <div className="card-body-content">
+              <p className="location-text">{course.campus}</p>
+              <div className="progress-container-box">
+                <div className="flex-space-between text-small"><span>Progress</span><span>{course.progress}% Completed</span></div>
+                <div className="progress-bar-rail"><div className="progress-bar-fill-track" style={{ width: `${course.progress}%`, backgroundColor: course.accentColor }}></div></div>
               </div>
-            ))}
-          </section>
-        </>
-      )}
+              <div className="meta-footer-info">
+                <div>Enrolled: {course.enrolled} students</div>
+                <div>Schedule: {course.schedule}</div>
+                <div>Started On: {course.startedOn}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </section>
     </>
   );
 };

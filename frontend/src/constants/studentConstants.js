@@ -127,8 +127,15 @@ export function validateStudentForm(form) {
   if (!form.studentName.trim()) errors.studentName = "Required";
   if (!form.fatherName.trim()) errors.fatherName = "Required";
   if (!CNIC_PATTERN.test(form.cnic.trim())) errors.cnic = "Format: 00000-0000000-0";
-  if (!form.dob) errors.dob = "Required — needed for student's Create Password login";
-  if (!PHONE_PATTERN.test(form.phone.trim())) errors.phone = "Format: 03XXXXXXXXX";
+  // FIX: DOB pehle hamesha required tha (chahe sirf status/payment change kar
+  // rahe ho) — jin students ka DOB pehle se save nahi tha (purane records ya
+  // admin ne quick-add kiya tha), unke liye Save button HAR edit par (status
+  // change bhi) DOB missing error de kar chup-chaap block ho jata tha, isliye
+  // lagta tha "status change nahi ho raha". Ab DOB sirf tab required hai jab
+  // user ne kuch value likhni shuru ki ho par format ghalat ho — khali chorna
+  // allowed hai, taake baaki fields (status waghera) hamesha save ho sakein.
+  if (form.phone && !PHONE_PATTERN.test(form.phone.trim())) errors.phone = "Format: 03XXXXXXXXX";
+  if (!form.phone.trim()) errors.phone = "Required";
   return errors;
 }
 

@@ -6,7 +6,7 @@ import QuizzesTab from './tabs/QuizzesTab';
 import ProgressTab from './tabs/ProgressTab';
 
 const CourseDetailView = ({
-  selectedCourse, setSelectedCourse, genderSection,
+  selectedCourse, setSelectedCourse,
   activeCourseTab, setActiveCourseTab,
   setSelectedAssignment, setSelectedQuiz,
 
@@ -39,7 +39,6 @@ const CourseDetailView = ({
     <div className="expanded-course-workspace-card animated-fade">
       <div className="breadcrumbs">
         <span className="breadcrumb-nav-link" onClick={() => { setSelectedCourse(null); }}>Dashboard</span> &gt;
-        <span className="breadcrumb-nav-link" onClick={() => setSelectedCourse(null)}> {genderSection}</span> &gt;
         <span className="current-crumb"> {selectedCourse.title}</span>
       </div>
       <div className="course-header-interactive-row"><h2>{selectedCourse.title}</h2></div>

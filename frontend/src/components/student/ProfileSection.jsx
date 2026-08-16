@@ -18,6 +18,7 @@ export default function ProfileSection({
   studentCourse,
   savingProfile,
   profileSaveError,
+  onViewIdCard,
 }) {
   return (
     <div className="s-section animated-fade">
@@ -55,7 +56,10 @@ export default function ProfileSection({
                 </button>
               </>
             ) : (
-              <button className="s-btn-outline" onClick={startEditProfile}>Edit Profile</button>
+              <>
+                <button className="s-btn-outline" onClick={startEditProfile}>Edit Profile</button>
+                <button className="s-btn-primary" onClick={onViewIdCard}>View ID Card</button>
+              </>
             )}
           </div>
         </div>

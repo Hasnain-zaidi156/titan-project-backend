@@ -15,6 +15,7 @@ import PaymentSection from "./PaymentSection"
 import AssignmentSection from "./AssignmentSection"
 import QuizSection from "./QuizSection"
 import ProfileSection from "./ProfileSection"
+import { IDCardModal } from "../admin/IDCardModal"
 
 const TITAN_LOGO = "https://i.ibb.co/q3c3CkLS/titan-logo.jpg"
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"
@@ -31,6 +32,10 @@ export default function StudentDashboard({
   phone = "",
   photo = "",
   timing = "", // admin-set "Sat 09:00 AM - 11:00 AM | Sun 09:00 AM - 11:00 AM" style string
+  fatherName = "",
+  admissionNo = "",
+  batch = "",
+  createdAt = "",
   onLogout,
 }) {
   // ===== Theme (dark / light mode) =====
@@ -153,9 +158,30 @@ export default function StudentDashboard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId])
 
+  // Admin jab bhi is student ka course/campus/batch/timing/photo change
+  // kare, yahan har 15 second mein khamoshi se (bina reload/blink ke)
+  // refresh ho jata hai — dobara login ya manual reload ki zaroorat nahi.
+  useEffect(() => {
+    if (!studentId) return
+    const interval = setInterval(fetchLatestProfile, 15000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId])
+
   useEffect(() => {
     fetchLiveAssignments()
     fetchLiveQuizzes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [course])
+
+  // Naya assignment/quiz trainer ne banaya to bhi bina reload ke dikh jaye.
+  useEffect(() => {
+    if (!course) return
+    const interval = setInterval(() => {
+      fetchLiveAssignments()
+      fetchLiveQuizzes()
+    }, 15000)
+    return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course])
 
@@ -194,6 +220,10 @@ export default function StudentDashboard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentActiveMenu])
+
+  // ===== ID Card modal (naya — sirf view/download ke liye, baaki state se
+  // koi lena dena nahi) =====
+  const [showIdCardModal, setShowIdCardModal] = useState(false)
 
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [feedbackType, setFeedbackType] = useState("")
@@ -257,6 +287,19 @@ export default function StudentDashboard({
     schedule: parsedSchedule,
     attendance: "0/0",
     assignments: "0/0",
+  }
+
+  // ID card front/back ke liye data — IDCardModal isi shape ko expect karta hai.
+  const idCardStudentPerson = {
+    studentName: profileData.name || studentName,
+    course: course || "—",
+    rollNumber: rollNumber || "—",
+    admissionNo: admissionNo || "—",
+    fatherName: fatherName || "—",
+    cnic: profileData.cnic || "—",
+    batch: batch || "—",
+    photo: profilePhoto,
+    createdAt,
   }
 
   // Current week ke din — admin ne jo days select ki hain wahi highlight hoti hain.
@@ -555,10 +598,19 @@ export default function StudentDashboard({
                 studentCourse={studentCourse}
                 savingProfile={savingProfile}
                 profileSaveError={profileSaveError}
+                onViewIdCard={() => setShowIdCardModal(true)}
               />
             )}
           </main>
         </>
+      )}
+
+      {showIdCardModal && (
+        <IDCardModal
+          type="student"
+          person={idCardStudentPerson}
+          onClose={() => setShowIdCardModal(false)}
+        />
       )}
     </div>
   )

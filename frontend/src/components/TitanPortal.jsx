@@ -252,6 +252,23 @@ export default function TitanPortal({ onLoginSuccess }) {
         </form>
       </div>
 
+      {/* New Admission — takes the visitor to the dedicated Admission Form
+          page (StudentAuth), separate from the login card above.
+          Temporarily commented out — button hidden from portal. */}
+{/* Ye Apply form ka button */}
+
+      {view !== 'teacher-login' && (
+        <div className="portal-switcher-box">
+          <button
+            type="button"
+            className="apply-admission-btn"
+            onClick={() => navigate('/apply')}
+          >
+            📝 New Admission — Apply Now
+          </button>
+        </div>
+      )}
+
       {/* Switching Button Area */}
       <div className="portal-switcher-box">
         {view === 'teacher-login' ? (
